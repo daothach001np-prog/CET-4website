@@ -9,6 +9,9 @@ Thumbs.db
 Snipaste_*.jpg
 Snipaste_*.png
 
+# Local CET4 source bank (large files, not required for runtime deploy)
+四级题库/
+
 # Python cache (if any local scripts run)
 __pycache__/
 *.pyc
