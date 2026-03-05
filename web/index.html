@@ -1,0 +1,638 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CET-4 翻身计划台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="./config.js"></script>
+</head>
+<body>
+  <div id="global-banner" class="global-banner hidden">
+    <div id="global-banner-icon" class="global-banner-icon">i</div>
+    <div id="global-banner-text" class="global-banner-text">提示信息</div>
+  </div>
+  <div id="upload-sticky-banner" class="upload-sticky-banner hidden" aria-live="polite">
+    <div class="upload-sticky-head">
+      <strong id="upload-sticky-text">上传准备中...</strong>
+      <span id="upload-sticky-percent">0%</span>
+    </div>
+    <div class="upload-sticky-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div id="upload-sticky-bar" class="upload-sticky-bar"></div>
+    </div>
+    <p id="upload-sticky-meta" class="upload-sticky-meta">上传进度将在此持续显示。</p>
+  </div>
+
+  <div class="bg-glow bg-a"></div>
+  <div class="bg-glow bg-b"></div>
+  <div class="bg-grid"></div>
+
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">LONG DISTANCE ENGLISH COACHING</p>
+        <h1>CET-4 翻身计划台</h1>
+        <p class="subtitle">每日提交 · 老师批改 · 每日复盘 · AI作文</p>
+      </div>
+      <div id="session-badge" class="session-badge offline">未登录</div>
+    </header>
+
+    <section id="alert" class="alert hidden"></section>
+
+    <section id="auth-panel" class="panel auth-panel">
+      <h2>账号登录</h2>
+      <p class="muted">先注册两个账号：你（老师）和对象（学生）。</p>
+      <div class="field-row">
+        <label for="email">邮箱</label>
+        <input id="email" type="email" placeholder="name@example.com" autocomplete="email" />
+      </div>
+      <div class="field-row">
+        <label for="password">密码</label>
+        <input id="password" type="password" placeholder="至少 6 位" autocomplete="current-password" />
+      </div>
+      <div class="inline-actions">
+        <button id="sign-in-btn" class="btn btn-primary" type="button" title="登录已有账号">登录</button>
+        <button id="sign-up-btn" class="btn btn-ghost" type="button" title="新账号注册">注册</button>
+      </div>
+    </section>
+
+    <section id="workspace" class="hidden">
+      <div class="workspace-head panel">
+        <div class="identity">
+          <div><span class="key">账号</span><span id="who-email">-</span></div>
+          <div><span class="key">角色</span><span id="who-role">-</span></div>
+        </div>
+        <div class="inline-actions">
+          <button id="claim-teacher-btn" class="btn btn-primary hidden" type="button" title="仅当系统没有老师时可用">设为老师</button>
+          <button id="claim-admin-btn" class="btn btn-ghost hidden" type="button" title="仅老师可申请成为管理员（全站仅1个）">设为管理员</button>
+          <button id="refresh-btn" class="btn btn-ghost" type="button" title="手动同步最新数据">刷新数据</button>
+          <button id="sign-out-btn" class="btn btn-danger" type="button" title="退出当前账号">退出登录</button>
+        </div>
+      </div>
+
+      <section id="motivation-panel" class="panel motivation-panel">
+        <p id="motivation-quote" class="motivation-quote">今天多做一页，考场就少慌一分。</p>
+        <p id="motivation-sub" class="motivation-sub">坚持是最稳定的提分策略。</p>
+      </section>
+
+      <section id="page-nav-panel" class="panel nav-panel">
+        <div id="student-nav" class="tab-nav hidden">
+          <button type="button" class="tab-btn" data-page="student-guide">新手引导</button>
+          <button type="button" class="tab-btn" data-page="student-home">作业提交</button>
+          <button type="button" class="tab-btn" data-page="student-history">提交记录</button>
+          <button type="button" class="tab-btn" data-page="student-reflection">每日复盘</button>
+          <button type="button" class="tab-btn" data-page="student-translation">翻译AI批改</button>
+          <button type="button" class="tab-btn" data-page="student-essay">作文AI批改</button>
+        </div>
+        <div id="teammate-nav" class="tab-nav hidden">
+          <button type="button" class="tab-btn" data-page="teammate-guide">新手引导</button>
+          <button type="button" class="tab-btn" data-page="teammate-home">作业提交</button>
+          <button type="button" class="tab-btn" data-page="teammate-history">提交记录</button>
+          <button type="button" class="tab-btn" data-page="teammate-review">互改批改</button>
+          <button type="button" class="tab-btn" data-page="teammate-reflection">每日复盘</button>
+          <button type="button" class="tab-btn" data-page="teammate-translation">翻译AI批改</button>
+          <button type="button" class="tab-btn" data-page="teammate-essay">作文AI批改</button>
+        </div>
+        <div id="teacher-nav" class="tab-nav hidden">
+          <button type="button" class="tab-btn" data-page="teacher-guide">新手引导</button>
+          <button type="button" class="tab-btn" data-page="teacher-review">作业批改</button>
+          <button type="button" class="tab-btn" data-page="teacher-reflection">复盘批注</button>
+          <button type="button" class="tab-btn" data-page="teacher-translation">翻译AI助手</button>
+          <button type="button" class="tab-btn" data-page="teacher-essay">作文AI助手</button>
+        </div>
+      </section>
+
+      <section id="guide-panel" class="panel hidden">
+        <div class="guide-hero">
+          <div>
+            <h2>新手引导</h2>
+            <p class="muted">第一次用建议按下面 4 步走，5 分钟可上手。</p>
+          </div>
+          <div class="guide-hero-art" aria-hidden="true"></div>
+        </div>
+
+        <div class="guide-grid">
+          <article class="guide-card">
+            <h3>1. 登录与角色</h3>
+            <p>先注册两个邮箱账号。老师账号先点“设为老师”，再在“角色管理”里确认学生身份。</p>
+          </article>
+          <article class="guide-card">
+            <h3>2. 作业提交</h3>
+            <p>学生每天在“作业提交”填写内容并上传图片。历史记录在“提交记录”页按模块标签查询。</p>
+          </article>
+          <article class="guide-card">
+            <h3>3. 批改与复盘</h3>
+            <p>老师在“作业批改”里逐条评分和评语；在“每日复盘”里给复盘批注，学生端可实时看到。</p>
+          </article>
+          <article class="guide-card">
+            <h3>4. AI 作文</h3>
+            <p>可直接粘贴作文或上传手写照片。先“识别图片作文”，再“AI 批改作文”，还能继续追问聊天。</p>
+          </article>
+        </div>
+
+        <div class="panel-soft contact-card">
+          <h3>联系作者</h3>
+          <p>反馈问题、定制功能、合作发布，请联系：</p>
+          <p><a class="author-link" href="mailto:18701894737@163.com">18701894737@163.com</a></p>
+        </div>
+      </section>
+
+      <section id="student-panel" class="panel hidden">
+        <h2>作业提交</h2>
+        <form id="submission-form" class="stack">
+          <div class="grid-2">
+            <div class="field-row">
+              <label for="study-date">学习日期</label>
+              <input id="study-date" type="date" />
+            </div>
+            <div class="field-row">
+              <label for="study-module">模块</label>
+              <select id="study-module">
+                <option value="reading">阅读</option>
+                <option value="translation">翻译</option>
+                <option value="writing">写作</option>
+                <option value="listening">听力</option>
+                <option value="mock">模拟考</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <label for="study-content">核心内容</label>
+            <textarea id="study-content" rows="6" placeholder="填写完成内容、答案、反思。"></textarea>
+          </div>
+          <div class="field-row">
+            <label for="study-paste-zone">上传图片（可多张）</label>
+            <div class="image-upload-box">
+              <textarea id="study-paste-zone" class="paste-upload-zone" rows="4" placeholder="在这里右键粘贴截图（或 Ctrl+V），也可拖拽图片到此区域。"></textarea>
+              <div class="inline-actions">
+                <button id="study-pick-btn" class="btn btn-ghost btn-small" type="button">点击选择图片</button>
+                <span class="muted">手机端可拍照或从相册选择；电脑端支持右键粘贴微信截图。大图会自动压缩后上传。</span>
+              </div>
+              <input id="study-images" class="hidden-file-input" type="file" accept="image/*" multiple />
+            </div>
+          </div>
+          <div class="field-row">
+            <label>已选待上传图片（可删除）</label>
+            <div id="pending-images" class="thumb-row"></div>
+          </div>
+          <div id="upload-progress-panel" class="upload-progress hidden" aria-live="polite">
+            <div class="upload-progress-head">
+              <strong id="upload-progress-text">准备上传...</strong>
+              <span id="upload-progress-percent">0%</span>
+            </div>
+            <div class="upload-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="upload-progress-bar" class="upload-progress-bar"></div>
+            </div>
+            <p id="upload-progress-meta" class="muted upload-progress-meta">系统将先压缩再并发上传。</p>
+          </div>
+          <div class="field-row">
+            <details id="existing-images-panel" class="fold-panel">
+              <summary>查看当天该模块历史图片（可删除，提交后生效）</summary>
+              <div id="existing-images" class="thumb-row"></div>
+            </details>
+          </div>
+          <div class="field-row">
+            <label for="word-summary">单词/固定句式总结</label>
+            <textarea id="word-summary" rows="3" placeholder="可选"></textarea>
+          </div>
+          <div class="field-row">
+            <label for="mistake-summary">错因复盘</label>
+            <textarea id="mistake-summary" rows="3" placeholder="可选"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" title="提交当前日期+模块">提交本模块</button>
+        </form>
+
+        <p class="muted">提交后可在“提交记录”标签页按模块查询历史记录与批改结果。</p>
+      </section>
+
+      <section id="history-panel" class="panel hidden">
+        <h2>提交记录查询</h2>
+        <p class="muted">按模块分类查看历史提交，无需折叠翻找。</p>
+        <div id="history-module-tabs" class="module-tabs">
+          <button type="button" class="module-tab active" data-module="all">全部</button>
+          <button type="button" class="module-tab" data-module="reading">阅读</button>
+          <button type="button" class="module-tab" data-module="translation">翻译</button>
+          <button type="button" class="module-tab" data-module="writing">写作</button>
+          <button type="button" class="module-tab" data-module="listening">听力</button>
+          <button type="button" class="module-tab" data-module="mock">模拟考</button>
+        </div>
+        <div id="history-list" class="history-list"></div>
+
+        <h3>我的罚款记录</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>金额</th>
+                <th>原因</th>
+              </tr>
+            </thead>
+            <tbody id="my-fines-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="teacher-panel" class="panel hidden">
+        <h2>作业批改</h2>
+
+        <div class="panel-soft teacher-only">
+          <h3>角色管理</h3>
+          <div class="grid-2">
+            <div class="field-row">
+              <label for="role-target-user">用户</label>
+              <select id="role-target-user"></select>
+            </div>
+            <div class="field-row">
+              <label for="role-target-value">角色</label>
+              <select id="role-target-value">
+                <option value="student">学生</option>
+                <option value="teammate">队友</option>
+                <option value="teacher">老师</option>
+              </select>
+            </div>
+          </div>
+          <button id="set-role-btn" class="btn btn-ghost" type="button" title="修改账号角色">设置角色</button>
+        </div>
+
+        <div class="panel-soft teacher-only">
+          <h3>学生身份标识（邮箱区分）</h3>
+          <div class="grid-2">
+            <div class="field-row">
+              <label for="identity-target-user">学生账号</label>
+              <select id="identity-target-user"></select>
+            </div>
+            <div class="field-row">
+              <label for="identity-display-name">显示名称（可改）</label>
+              <input id="identity-display-name" type="text" maxlength="80" placeholder="例如：张思涵 / 小涵" />
+            </div>
+          </div>
+          <p id="identity-email" class="muted">注册邮箱：-</p>
+          <div class="inline-actions">
+            <button id="load-identity-btn" class="btn btn-ghost" type="button" title="读取当前选中学生资料">读取资料</button>
+            <button id="save-identity-btn" class="btn btn-primary" type="button" title="保存显示名称">保存显示名称</button>
+            <button id="use-email-as-name-btn" class="btn btn-ghost" type="button" title="一键将显示名称设置为注册邮箱">显示名=邮箱</button>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-row">
+            <label for="teacher-date">按日期筛选</label>
+            <input id="teacher-date" type="date" />
+          </div>
+          <div class="field-row">
+            <label for="teacher-module">按模块筛选</label>
+            <select id="teacher-module">
+              <option value="all">全部</option>
+              <option value="reading">阅读</option>
+              <option value="translation">翻译</option>
+              <option value="writing">写作</option>
+              <option value="listening">听力</option>
+              <option value="mock">模拟考</option>
+            </select>
+          </div>
+        </div>
+        <button id="teacher-load-btn" class="btn btn-ghost" type="button" title="按筛选条件重新加载提交">刷新提交列表</button>
+
+        <div id="teacher-review-list" class="review-list"></div>
+
+        <div class="review-editor">
+          <h3>批改编辑器</h3>
+          <p id="review-target" class="muted">当前未选择提交</p>
+          <div id="review-images" class="thumb-row"></div>
+          <h4>老师图片批注（圈画）</h4>
+          <div id="review-annotations" class="thumb-row"></div>
+          <div class="grid-2">
+            <div class="field-row">
+              <label for="review-status">状态</label>
+              <select id="review-status">
+                <option value="passed">通过</option>
+                <option value="returned">退回重做</option>
+                <option value="pending">待处理</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="review-score">分数 (0-100)</label>
+              <input id="review-score" type="number" min="0" max="100" value="80" />
+            </div>
+          </div>
+          <div class="field-row">
+            <label for="review-comment">评语（学生可见）</label>
+            <textarea id="review-comment" rows="4" placeholder="具体指出错因和改进建议。"></textarea>
+          </div>
+          <button id="save-review-btn" class="btn btn-primary" type="button" title="保存这条批改">保存批改</button>
+          <p id="review-last-saved" class="muted">最近提交：-</p>
+        </div>
+
+        <div class="review-editor">
+          <div class="translation-head-actions inline-actions">
+            <h3>已提交批改记录</h3>
+            <button id="saved-review-refresh-btn" class="btn btn-ghost btn-small" type="button" title="刷新当前已提交记录列表">刷新列表</button>
+          </div>
+          <p class="muted">保存成功后会即时显示在这里，便于确认是否提交。</p>
+          <div id="saved-review-list" class="review-list"></div>
+        </div>
+
+        <div class="audit panel-soft teacher-only">
+          <h3>漏交检查与罚款</h3>
+          <div class="grid-2">
+            <div class="field-row">
+              <label for="audit-student">学生</label>
+              <select id="audit-student"></select>
+            </div>
+            <div class="field-row">
+              <label for="audit-date">检查日期</label>
+              <input id="audit-date" type="date" />
+            </div>
+          </div>
+          <div class="inline-actions">
+            <button id="audit-student-btn" class="btn btn-primary" type="button" title="检查单个学生当天是否漏交">检查单人</button>
+            <button id="audit-all-btn" class="btn btn-ghost" type="button" title="批量检查所有学生当天是否漏交">检查全部学生</button>
+          </div>
+        </div>
+
+        <h3 class="teacher-only">全量罚款记录</h3>
+        <div class="table-wrap teacher-only">
+          <table>
+            <thead>
+              <tr>
+                <th>学生</th>
+                <th>日期</th>
+                <th>金额</th>
+                <th>原因</th>
+              </tr>
+            </thead>
+            <tbody id="teacher-fines-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="reflection-panel" class="panel reflection-panel hidden">
+        <h2>每日复盘</h2>
+
+        <div id="reflection-student" class="hidden">
+          <form id="reflection-form" class="stack">
+            <div class="grid-2">
+              <div class="field-row">
+                <label for="reflection-date">复盘日期</label>
+                <input id="reflection-date" type="date" />
+              </div>
+              <div class="field-row">
+                <label for="reflection-focus">今日重点</label>
+                <input id="reflection-focus" type="text" maxlength="120" placeholder="例如：阅读错因、翻译句式" />
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="reflection-content">复盘内容</label>
+              <textarea id="reflection-content" rows="4" placeholder="今天做了什么、收获和不足、明天计划。"></textarea>
+            </div>
+            <button id="save-reflection-btn" type="submit" class="btn btn-primary" title="提交当天复盘">提交当日复盘</button>
+          </form>
+
+          <h3>我的复盘与老师批注</h3>
+          <div id="student-reflection-list" class="reflection-list"></div>
+        </div>
+
+        <div id="reflection-teacher" class="hidden">
+          <div class="grid-2">
+            <div class="field-row">
+              <label for="reflection-filter-date">按日期筛选</label>
+              <input id="reflection-filter-date" type="date" />
+            </div>
+            <div class="field-row">
+              <label for="reflection-filter-student">按同学筛选</label>
+              <select id="reflection-filter-student">
+                <option value="all">全部同学</option>
+              </select>
+            </div>
+          </div>
+          <button id="load-reflections-btn" type="button" class="btn btn-ghost" title="按筛选条件刷新复盘记录">刷新复盘列表</button>
+
+          <div id="teacher-reflection-list" class="review-list"></div>
+
+          <div class="review-editor">
+            <h3>复盘批注</h3>
+            <p id="reflection-target" class="muted">当前未选择复盘</p>
+            <div class="field-row">
+              <label for="reflection-comment">老师批注（学生可见）</label>
+              <textarea id="reflection-comment" rows="4" placeholder="针对该复盘给出明确改进建议。"></textarea>
+            </div>
+            <button id="save-reflection-comment-btn" type="button" class="btn btn-primary" title="保存这条复盘的老师批注">保存复盘批注</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="essay-panel" class="panel hidden">
+        <h2>作文 AI 批改</h2>
+        <p class="muted">支持一键批改 + 追问聊天。接口采用 OpenAI 兼容 `chat/completions`。</p>
+
+        <details class="panel-soft" open>
+          <summary>API 配置</summary>
+          <div class="stack panel-inner">
+            <div class="grid-2">
+              <div class="field-row">
+                <label for="ai-endpoint">API Endpoint</label>
+                <input id="ai-endpoint" type="text" placeholder="https://api.openai.com/v1/chat/completions" />
+              </div>
+              <div class="field-row">
+                <label for="ai-model">Model</label>
+                <input id="ai-model" type="text" placeholder="gpt-4o-mini" />
+              </div>
+            </div>
+            <div class="field-row">
+              <label for="ai-vision-model">Vision Model（图片识别）</label>
+              <input id="ai-vision-model" type="text" placeholder="例如：PaddlePaddle/PaddleOCR-VL-1.5" />
+            </div>
+            <div class="field-row">
+              <label for="ai-key">API Key</label>
+              <input id="ai-key" type="password" placeholder="sk-..." />
+            </div>
+            <div class="inline-actions">
+              <button id="ai-save-config-btn" class="btn btn-ghost" type="button">保存配置</button>
+              <button id="ai-test-btn" class="btn btn-ghost" type="button">测试连接</button>
+            </div>
+          </div>
+        </details>
+
+        <div class="field-row">
+          <label for="essay-topic">作文题目</label>
+          <input id="essay-topic" type="text" maxlength="300" placeholder="例如：The Role of Perseverance" />
+        </div>
+        <div class="field-row">
+          <label for="essay-goal">目标（可选）</label>
+          <input id="essay-goal" type="text" maxlength="200" placeholder="例如：目标四级写作 13+，句式自然不生硬" />
+        </div>
+        <div class="field-row">
+          <label for="essay-content">作文正文</label>
+          <textarea id="essay-content" rows="10" placeholder="粘贴你的作文正文"></textarea>
+        </div>
+          <div class="field-row">
+            <label for="essay-paste-zone">作文拍照上传（手写可拍照）</label>
+            <div class="image-upload-box">
+              <textarea id="essay-paste-zone" class="paste-upload-zone" rows="4" placeholder="在这里右键粘贴作文图片（或 Ctrl+V），也可拖拽图片到此区域。"></textarea>
+              <div class="inline-actions">
+                <button id="essay-pick-btn" class="btn btn-ghost btn-small" type="button">点击选择图片</button>
+                <span class="muted">支持手机直接拍照或电脑粘贴；最多 3 张。建议先拍清晰正面图。</span>
+              </div>
+              <input id="essay-images" class="hidden-file-input" type="file" accept="image/*" multiple />
+            </div>
+            <div id="essay-pending-images" class="thumb-row"></div>
+          </div>
+        <div class="inline-actions">
+          <button id="essay-ocr-btn" class="btn btn-ghost" type="button">先识别图片作文</button>
+          <button id="essay-review-btn" class="btn btn-primary" type="button">AI 批改作文</button>
+          <button id="essay-clear-btn" class="btn btn-ghost" type="button">清空作文</button>
+        </div>
+        <div id="essay-result" class="essay-result muted">暂无批改结果。</div>
+
+        <div class="panel-soft">
+          <h3>追问聊天</h3>
+          <div id="essay-chat-log" class="chat-log"></div>
+          <div class="inline-chat">
+            <input id="essay-chat-input" type="text" placeholder="继续追问：比如“给我3个可替换高级句式”" />
+            <button id="essay-chat-send-btn" class="btn btn-primary" type="button">发送</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="translation-panel" class="panel hidden">
+        <h2>翻译 AI 对照批改</h2>
+        <p class="muted">支持真题对照批改 + 手写拍照识别。建议先识别后人工确认，再提交批改。默认复用“作文 AI 批改”里的同一套 API 配置。</p>
+
+        <div id="translation-student" class="stack hidden">
+          <details class="panel-soft" open>
+            <summary>题目与答案</summary>
+            <div class="stack panel-inner">
+              <div class="grid-2">
+                <div class="field-row">
+                  <label for="translation-mode">题目模式</label>
+                  <select id="translation-mode">
+                    <option value="corpus">四级真题题库</option>
+                    <option value="custom">自定义题目</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <label for="translation-year-filter">年份批次</label>
+                  <select id="translation-year-filter">
+                    <option value="all">全部批次</option>
+                  </select>
+                </div>
+              </div>
+              <div class="grid-2">
+                <div class="field-row">
+                  <label for="translation-paper-filter">试卷套数</label>
+                  <select id="translation-paper-filter">
+                    <option value="all">全部套数</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <label for="translation-prompt-select">真题题目</label>
+                  <select id="translation-prompt-select"></select>
+                </div>
+              </div>
+              <div class="field-row">
+                <label for="translation-source">中文原文</label>
+                <textarea id="translation-source" rows="4" placeholder="题库模式自动填充；自定义模式手动填写。"></textarea>
+              </div>
+              <div class="field-row">
+                <label for="translation-reference">参考译文（可选）</label>
+                <textarea id="translation-reference" rows="4" placeholder="题库模式自动填充；自定义模式可不填。"></textarea>
+              </div>
+            </div>
+          </details>
+
+          <div class="field-row">
+            <label for="translation-student-text">我的英文翻译</label>
+            <textarea id="translation-student-text" rows="7" placeholder="在这里粘贴或编辑你的翻译文本。"></textarea>
+          </div>
+          <div class="field-row">
+            <label for="translation-paste-zone">手写翻译拍照（最多 3 张）</label>
+            <div class="image-upload-box">
+              <textarea id="translation-paste-zone" class="paste-upload-zone" rows="4" placeholder="在这里右键粘贴翻译图片（或 Ctrl+V），也可拖拽图片到此区域。"></textarea>
+              <div class="inline-actions">
+                <button id="translation-pick-btn" class="btn btn-ghost btn-small" type="button">点击选择图片</button>
+                <span class="muted">支持手机拍照或电脑粘贴。先点“识别手写译文”，再手动修正后提交批改。</span>
+              </div>
+              <input id="translation-images" class="hidden-file-input" type="file" accept="image/*" multiple />
+            </div>
+            <div id="translation-pending-images" class="thumb-row"></div>
+          </div>
+          <div class="inline-actions">
+            <button id="translation-ocr-btn" class="btn btn-ghost" type="button">识别手写译文</button>
+            <button id="translation-review-btn" class="btn btn-primary" type="button">AI 对照批改</button>
+            <button id="translation-clear-btn" class="btn btn-ghost" type="button">清空本次</button>
+          </div>
+          <div id="translation-result" class="essay-result muted">暂无翻译批改结果。</div>
+
+          <div class="panel-soft">
+            <div class="inline-actions translation-head-actions">
+              <h3>我的翻译批改记录</h3>
+              <button id="translation-history-refresh-btn" class="btn btn-ghost btn-small" type="button">刷新记录</button>
+            </div>
+            <div id="translation-history-list" class="history-list"></div>
+          </div>
+        </div>
+
+        <div id="translation-teacher" class="stack hidden">
+          <div class="grid-2">
+            <div class="field-row">
+              <label for="translation-teacher-date">按日期筛选</label>
+              <input id="translation-teacher-date" type="date" />
+            </div>
+            <div class="field-row">
+              <label for="translation-teacher-student">按学生筛选</label>
+              <select id="translation-teacher-student">
+                <option value="all">全部同学</option>
+              </select>
+            </div>
+          </div>
+          <button id="translation-teacher-load-btn" class="btn btn-ghost" type="button">刷新翻译批改列表</button>
+          <div id="translation-teacher-list" class="review-list"></div>
+
+          <div class="review-editor">
+            <h3>翻译老师复核</h3>
+            <p id="translation-review-target" class="muted">当前未选择翻译作答</p>
+            <div class="field-row">
+              <label for="translation-review-score">老师复核分数（0-100）</label>
+              <input id="translation-review-score" type="number" min="0" max="100" value="80" />
+            </div>
+            <div class="field-row">
+              <label for="translation-review-comment">老师复核评语</label>
+              <textarea id="translation-review-comment" rows="4" placeholder="指出关键错误和改进方向。"></textarea>
+            </div>
+            <button id="translation-save-review-btn" class="btn btn-primary" type="button">保存老师复核</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <section id="annot-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="annot-modal-title">图片圈画批注</h3>
+        <button id="annot-close-btn" type="button" class="btn btn-danger btn-small" title="关闭批注弹窗">关闭</button>
+      </div>
+      <p id="annot-modal-tip" class="muted">支持鼠标或手指绘制，保存后学生端可见。</p>
+      <div class="annot-canvas-wrap">
+        <canvas id="annot-canvas"></canvas>
+      </div>
+      <div class="field-row">
+        <label for="annot-note">批注备注（可选）</label>
+        <input id="annot-note" type="text" maxlength="200" placeholder="例如：主谓不一致，这句重写" />
+      </div>
+      <div class="inline-actions">
+        <button id="annot-undo-btn" class="btn btn-ghost btn-small" type="button" title="撤销上一步圈画">撤销</button>
+        <button id="annot-clear-btn" class="btn btn-ghost btn-small" type="button" title="清空当前圈画，保留原图">清空</button>
+        <button id="annot-save-btn" class="btn btn-primary btn-small" type="button" title="保存圈画批注并同步给学生">保存批注图</button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

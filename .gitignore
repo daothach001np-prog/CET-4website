@@ -1,0 +1,17 @@
+# OS / Explorer
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local screenshots / temp captures
+Snipaste_*.jpg
+Snipaste_*.png
+
+# Python cache (if any local scripts run)
+__pycache__/
+*.pyc
+
+# Netlify local cache (if used before)
+.netlify/
