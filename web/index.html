@@ -65,11 +65,28 @@
           <div><span class="key">账号</span><span id="who-email">-</span></div>
           <div><span class="key">角色</span><span id="who-role">-</span></div>
         </div>
-        <div class="inline-actions">
-          <button id="claim-teacher-btn" class="btn btn-primary hidden" type="button" title="仅当系统没有老师时可用">设为老师</button>
-          <button id="claim-admin-btn" class="btn btn-ghost hidden" type="button" title="仅老师可申请成为管理员（全站仅1个）">设为管理员</button>
-          <button id="refresh-btn" class="btn btn-ghost" type="button" title="手动同步最新数据">刷新数据</button>
-          <button id="sign-out-btn" class="btn btn-danger" type="button" title="退出当前账号">退出登录</button>
+        <div class="workspace-tools">
+          <div class="message-hub">
+            <button id="message-bell-btn" class="message-bell" type="button" title="查看消息提醒" aria-label="查看消息提醒">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3.5a4.5 4.5 0 0 0-4.5 4.5v1.2c0 1.4-.45 2.77-1.28 3.9L4.7 15.1A1 1 0 0 0 5.5 16.7h13a1 1 0 0 0 .8-1.6l-1.52-2.01a6.72 6.72 0 0 1-1.28-3.9V8A4.5 4.5 0 0 0 12 3.5Zm0 17a2.34 2.34 0 0 1-2.2-1.54h4.4A2.34 2.34 0 0 1 12 20.5Z" />
+              </svg>
+              <span id="message-bell-badge" class="message-bell-badge hidden">0</span>
+            </button>
+            <div id="message-panel" class="message-panel hidden">
+              <div class="message-panel-head">
+                <h3>消息提醒</h3>
+                <button id="mark-all-read-btn" class="btn btn-ghost btn-small" type="button" title="将当前消息全部标记为已读">全部已读</button>
+              </div>
+              <div id="message-list" class="message-list"></div>
+            </div>
+          </div>
+          <div class="inline-actions">
+            <button id="claim-teacher-btn" class="btn btn-primary hidden" type="button" title="仅当系统没有老师时可用">设为老师</button>
+            <button id="claim-admin-btn" class="btn btn-ghost hidden" type="button" title="仅老师可申请成为管理员（全站仅1个）">设为管理员</button>
+            <button id="refresh-btn" class="btn btn-ghost" type="button" title="手动同步最新数据">刷新数据</button>
+            <button id="sign-out-btn" class="btn btn-danger" type="button" title="退出当前账号">退出登录</button>
+          </div>
         </div>
       </div>
 
@@ -203,6 +220,10 @@
             <label for="mistake-summary">错因复盘</label>
             <textarea id="mistake-summary" rows="3" placeholder="可选"></textarea>
           </div>
+          <div class="draft-strip">
+            <p id="submission-draft-state" class="muted">文字和待上传图片会自动保存为草稿，刷新后可继续编辑。</p>
+            <button id="clear-submission-draft-btn" class="btn btn-ghost btn-small" type="button" title="清空当前本地草稿">清空草稿</button>
+          </div>
           <button type="submit" class="btn btn-primary" title="提交当前日期+模块">提交本模块</button>
         </form>
 
@@ -222,18 +243,24 @@
         </div>
         <div id="history-list" class="history-list"></div>
 
-        <h3>我的罚款记录</h3>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>金额</th>
-                <th>原因</th>
-              </tr>
-            </thead>
-            <tbody id="my-fines-body"></tbody>
-          </table>
+        <h3>我的打卡日历</h3>
+        <div class="calendar-shell">
+          <div class="calendar-toolbar">
+            <div class="inline-actions">
+              <button id="student-calendar-prev-btn" class="btn btn-ghost btn-small" type="button" title="查看上个月">上月</button>
+              <button id="student-calendar-today-btn" class="btn btn-ghost btn-small" type="button" title="回到当前月份">本月</button>
+              <button id="student-calendar-next-btn" class="btn btn-ghost btn-small" type="button" title="查看下个月">下月</button>
+            </div>
+            <strong id="student-calendar-label">-</strong>
+          </div>
+          <div class="calendar-legend">
+            <span class="calendar-legend-item"><i class="calendar-dot ring"></i>老师圈一下</span>
+            <span class="calendar-legend-item"><i class="calendar-dot done"></i>已完成</span>
+            <span class="calendar-legend-item"><i class="calendar-dot missed"></i>待补交</span>
+            <span class="calendar-legend-item"><i class="calendar-dot count"></i>右下角数字=当天提交模块数</span>
+          </div>
+          <div id="student-calendar-grid" class="calendar-grid"></div>
+          <p class="muted">这个月的老师标记和当天提交模块数都会显示在这里，方便直接看学习节奏。</p>
         </div>
       </section>
 
@@ -324,6 +351,10 @@
             <label for="review-comment">评语（学生可见）</label>
             <textarea id="review-comment" rows="4" placeholder="具体指出错因和改进建议。"></textarea>
           </div>
+          <div class="draft-strip">
+            <p id="review-draft-state" class="muted">当前批改内容会自动暂存，本地刷新后可恢复。</p>
+            <button id="clear-review-draft-btn" class="btn btn-ghost btn-small" type="button" title="清空当前批改的本地草稿">清空本地草稿</button>
+          </div>
           <button id="save-review-btn" class="btn btn-primary" type="button" title="保存这条批改">保存批改</button>
           <p id="review-last-saved" class="muted">最近提交：-</p>
         </div>
@@ -337,37 +368,33 @@
           <div id="saved-review-list" class="review-list"></div>
         </div>
 
-        <div class="audit panel-soft teacher-only">
-          <h3>漏交检查与罚款</h3>
+        <div class="review-editor teacher-only">
+          <h3>打卡日历</h3>
           <div class="grid-2">
             <div class="field-row">
-              <label for="audit-student">学生</label>
-              <select id="audit-student"></select>
+              <label for="calendar-student">学生</label>
+              <select id="calendar-student"></select>
             </div>
             <div class="field-row">
-              <label for="audit-date">检查日期</label>
-              <input id="audit-date" type="date" />
+              <label for="teacher-calendar-label">月份</label>
+              <div class="calendar-toolbar compact">
+                <div class="inline-actions">
+                  <button id="teacher-calendar-prev-btn" class="btn btn-ghost btn-small" type="button" title="查看上个月">上月</button>
+                  <button id="teacher-calendar-today-btn" class="btn btn-ghost btn-small" type="button" title="回到当前月份">本月</button>
+                  <button id="teacher-calendar-next-btn" class="btn btn-ghost btn-small" type="button" title="查看下个月">下月</button>
+                </div>
+                <strong id="teacher-calendar-label">-</strong>
+              </div>
             </div>
           </div>
-          <div class="inline-actions">
-            <button id="audit-student-btn" class="btn btn-primary" type="button" title="检查单个学生当天是否漏交">检查单人</button>
-            <button id="audit-all-btn" class="btn btn-ghost" type="button" title="批量检查所有学生当天是否漏交">检查全部学生</button>
+          <div class="calendar-legend">
+            <span class="calendar-legend-item"><i class="calendar-dot ring"></i>圈一下</span>
+            <span class="calendar-legend-item"><i class="calendar-dot done"></i>已完成</span>
+            <span class="calendar-legend-item"><i class="calendar-dot missed"></i>待补交</span>
+            <span class="calendar-legend-item"><i class="calendar-dot count"></i>右下角数字=当天提交模块数</span>
           </div>
-        </div>
-
-        <h3 class="teacher-only">全量罚款记录</h3>
-        <div class="table-wrap teacher-only">
-          <table>
-            <thead>
-              <tr>
-                <th>学生</th>
-                <th>日期</th>
-                <th>金额</th>
-                <th>原因</th>
-              </tr>
-            </thead>
-            <tbody id="teacher-fines-body"></tbody>
-          </table>
+          <div id="teacher-calendar-grid" class="calendar-grid calendar-grid-editable"></div>
+          <p class="muted">点击日期可循环切换：空白 -> 圈一下 -> 已完成 -> 待补交。这里只做轻量打卡，不再走罚钱统计。</p>
         </div>
       </section>
 
@@ -610,6 +637,31 @@
       </section>
     </section>
   </main>
+
+  <section id="image-preview-modal" class="modal hidden">
+    <div class="modal-card image-preview-card">
+      <div class="modal-head">
+        <div>
+          <h3 id="image-preview-title">作业图片预览</h3>
+          <p id="image-preview-tip" class="muted">旋转、翻转和缩放只影响当前预览，不会改动原图。</p>
+        </div>
+        <button id="image-preview-close-btn" type="button" class="btn btn-danger btn-small" title="关闭预览弹窗">关闭</button>
+      </div>
+      <div class="image-preview-stage">
+        <img id="image-preview-img" class="image-preview-img" alt="作业图片预览" />
+      </div>
+      <div class="image-preview-tools inline-actions">
+        <button id="image-preview-zoom-out-btn" class="btn btn-ghost btn-small" type="button" title="缩小图片">缩小</button>
+        <button id="image-preview-zoom-in-btn" class="btn btn-ghost btn-small" type="button" title="放大图片">放大</button>
+        <button id="image-preview-rotate-left-btn" class="btn btn-ghost btn-small" type="button" title="逆时针旋转 90 度">左转</button>
+        <button id="image-preview-rotate-right-btn" class="btn btn-ghost btn-small" type="button" title="顺时针旋转 90 度">右转</button>
+        <button id="image-preview-flip-x-btn" class="btn btn-ghost btn-small" type="button" title="水平翻转">左右翻</button>
+        <button id="image-preview-flip-y-btn" class="btn btn-ghost btn-small" type="button" title="垂直翻转">上下翻</button>
+        <button id="image-preview-reset-btn" class="btn btn-ghost btn-small" type="button" title="恢复默认预览角度">复位</button>
+        <button id="image-preview-open-annot-btn" class="btn btn-primary btn-small" type="button" title="带着这张图去圈画批注">去圈画</button>
+      </div>
+    </div>
+  </section>
 
   <section id="annot-modal" class="modal hidden">
     <div class="modal-card">

@@ -43,6 +43,18 @@ const SUBMISSION_BUCKET = "submission-images";
 const ANNOT_BUCKET = "annotation-images";
 const SUBMISSION_PUBLIC_MARKER = `/storage/v1/object/public/${SUBMISSION_BUCKET}/`;
 const ANNOT_PUBLIC_MARKER = `/storage/v1/object/public/${ANNOT_BUCKET}/`;
+const SUBMISSION_DRAFT_PREFIX = "cet4_submission_draft";
+const REVIEW_DRAFT_PREFIX = "cet4_review_draft";
+const DRAFT_DB_NAME = "cet4-progress-draft-assets";
+const DRAFT_DB_VERSION = 1;
+const DRAFT_DB_STORE = "submissionDrafts";
+const MESSAGE_POLL_INTERVAL_MS = 28000;
+const CALENDAR_MARK_ORDER = ["none", "ring", "done", "missed"];
+const CALENDAR_MARK_LABELS = {
+  ring: "圈一下",
+  done: "已完成",
+  missed: "待补交",
+};
 
 const ui = {};
 
@@ -79,6 +91,33 @@ let historyModuleFilter = "all";
 let mySubmissionCache = [];
 let myReviewMap = new Map();
 let myAnnotationMap = new Map();
+let submissionDraftTimer = 0;
+let reviewDraftTimer = 0;
+let suppressSubmissionDraftSync = false;
+let suppressReviewDraftSync = false;
+let draftDbPromise = null;
+let unreadMessageCount = 0;
+let messageCache = [];
+let messagePollTimer = 0;
+let messagesFeatureReady = true;
+let calendarFeatureReady = true;
+let studentCalendarCursor = startOfMonth(new Date());
+let teacherCalendarCursor = startOfMonth(new Date());
+let studentCalendarMarks = [];
+let teacherCalendarMarks = [];
+let studentCalendarSubmissionCounts = new Map();
+let teacherCalendarSubmissionCounts = new Map();
+let hasShownSubmissionDraftRestore = false;
+
+const previewState = {
+  open: false,
+  submissionId: null,
+  sourceUrl: "",
+  rotation: 0,
+  scale: 1,
+  flipX: 1,
+  flipY: 1,
+};
 
 const annotState = {
   open: false,
@@ -170,6 +209,11 @@ function cacheUi() {
     "workspace",
     "who-email",
     "who-role",
+    "message-bell-btn",
+    "message-bell-badge",
+    "message-panel",
+    "message-list",
+    "mark-all-read-btn",
     "claim-teacher-btn",
     "claim-admin-btn",
     "refresh-btn",
@@ -197,10 +241,16 @@ function cacheUi() {
     "existing-images",
     "word-summary",
     "mistake-summary",
+    "submission-draft-state",
+    "clear-submission-draft-btn",
     "history-panel",
     "history-module-tabs",
     "history-list",
-    "my-fines-body",
+    "student-calendar-prev-btn",
+    "student-calendar-today-btn",
+    "student-calendar-next-btn",
+    "student-calendar-label",
+    "student-calendar-grid",
     "teacher-panel",
     "role-target-user",
     "role-target-value",
@@ -221,15 +271,18 @@ function cacheUi() {
     "review-status",
     "review-score",
     "review-comment",
+    "review-draft-state",
+    "clear-review-draft-btn",
     "save-review-btn",
     "review-last-saved",
     "saved-review-list",
     "saved-review-refresh-btn",
-    "audit-student",
-    "audit-date",
-    "audit-student-btn",
-    "audit-all-btn",
-    "teacher-fines-body",
+    "calendar-student",
+    "teacher-calendar-prev-btn",
+    "teacher-calendar-today-btn",
+    "teacher-calendar-next-btn",
+    "teacher-calendar-label",
+    "teacher-calendar-grid",
     "reflection-panel",
     "reflection-student",
     "reflection-teacher",
@@ -295,6 +348,19 @@ function cacheUi() {
     "translation-review-score",
     "translation-review-comment",
     "translation-save-review-btn",
+    "image-preview-modal",
+    "image-preview-title",
+    "image-preview-tip",
+    "image-preview-close-btn",
+    "image-preview-img",
+    "image-preview-zoom-out-btn",
+    "image-preview-zoom-in-btn",
+    "image-preview-rotate-left-btn",
+    "image-preview-rotate-right-btn",
+    "image-preview-flip-x-btn",
+    "image-preview-flip-y-btn",
+    "image-preview-reset-btn",
+    "image-preview-open-annot-btn",
     "annot-modal",
     "annot-modal-title",
     "annot-modal-tip",
@@ -314,6 +380,22 @@ function cacheUi() {
 function bindEvents() {
   ui["sign-in-btn"].addEventListener("click", () => void signIn());
   ui["sign-up-btn"].addEventListener("click", () => void signUp());
+  ui["message-bell-btn"].addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleMessagePanel();
+  });
+  ui["mark-all-read-btn"].addEventListener("click", () => void markAllMessagesRead());
+  ui["message-list"].addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-open-message-id]");
+    if (!btn) {
+      return;
+    }
+    const messageId = btn.dataset.openMessageId;
+    if (!messageId) {
+      return;
+    }
+    void openMessage(messageId);
+  });
   ui["claim-teacher-btn"].addEventListener("click", () => void claimTeacherRole());
   ui["claim-admin-btn"].addEventListener("click", () => void claimAdminRole());
   ui["refresh-btn"].addEventListener("click", () => void refreshData());
@@ -424,6 +506,19 @@ function bindEvents() {
     void saveSubmission();
   });
 
+  ui["study-date"].addEventListener("change", () => {
+    scheduleSubmissionDraftSync();
+    void onStudentSlotChanged();
+  });
+  ui["study-module"].addEventListener("change", () => {
+    scheduleSubmissionDraftSync();
+    void onStudentSlotChanged();
+  });
+  ui["study-content"].addEventListener("input", scheduleSubmissionDraftSync);
+  ui["word-summary"].addEventListener("input", scheduleSubmissionDraftSync);
+  ui["mistake-summary"].addEventListener("input", scheduleSubmissionDraftSync);
+  ui["clear-submission-draft-btn"].addEventListener("click", () => void clearSubmissionDraft(true));
+
   ui["study-images"].addEventListener("change", (event) => {
     void onPickImages(event);
   });
@@ -447,9 +542,6 @@ function bindEvents() {
     }
     removeExistingImage(index);
   });
-
-  ui["study-date"].addEventListener("change", () => void onStudentSlotChanged());
-  ui["study-module"].addEventListener("change", () => void onStudentSlotChanged());
 
   ui["set-role-btn"].addEventListener("click", () => void setUserRole());
   ui["identity-target-user"].addEventListener("change", loadIdentityFromSelection);
@@ -480,6 +572,16 @@ function bindEvents() {
   });
 
   ui["review-images"].addEventListener("click", (event) => {
+    const previewBtn = event.target.closest("button[data-open-preview]");
+    if (previewBtn) {
+      const submissionId = previewBtn.dataset.submissionId;
+      const source = previewBtn.dataset.sourceUrl;
+      if (submissionId && source) {
+        openImagePreview(submissionId, decodeURIComponent(source));
+      }
+      return;
+    }
+
     const btn = event.target.closest("button[data-open-annot]");
     if (!btn) {
       return;
@@ -514,16 +616,54 @@ function bindEvents() {
     if (!id) {
       return;
     }
-    void selectSubmissionForReview(id, true);
+    void selectSubmissionForReview(id);
   });
 
   ui["saved-review-refresh-btn"].addEventListener("click", () => {
     void loadTeacherData(true);
   });
 
+  ui["review-status"].addEventListener("change", scheduleReviewDraftSync);
+  ui["review-score"].addEventListener("input", scheduleReviewDraftSync);
+  ui["review-comment"].addEventListener("input", scheduleReviewDraftSync);
+  ui["clear-review-draft-btn"].addEventListener("click", () => void clearActiveReviewDraft());
   ui["save-review-btn"].addEventListener("click", () => void saveReview());
-  ui["audit-student-btn"].addEventListener("click", () => void runAuditStudent());
-  ui["audit-all-btn"].addEventListener("click", () => void runAuditAll());
+  ui["student-calendar-prev-btn"].addEventListener("click", () => {
+    studentCalendarCursor = addMonths(studentCalendarCursor, -1);
+    void loadStudentCalendarData();
+  });
+  ui["student-calendar-today-btn"].addEventListener("click", () => {
+    studentCalendarCursor = startOfMonth(new Date());
+    void loadStudentCalendarData();
+  });
+  ui["student-calendar-next-btn"].addEventListener("click", () => {
+    studentCalendarCursor = addMonths(studentCalendarCursor, 1);
+    void loadStudentCalendarData();
+  });
+  ui["calendar-student"].addEventListener("change", () => void loadTeacherCalendarData());
+  ui["teacher-calendar-prev-btn"].addEventListener("click", () => {
+    teacherCalendarCursor = addMonths(teacherCalendarCursor, -1);
+    void loadTeacherCalendarData();
+  });
+  ui["teacher-calendar-today-btn"].addEventListener("click", () => {
+    teacherCalendarCursor = startOfMonth(new Date());
+    void loadTeacherCalendarData();
+  });
+  ui["teacher-calendar-next-btn"].addEventListener("click", () => {
+    teacherCalendarCursor = addMonths(teacherCalendarCursor, 1);
+    void loadTeacherCalendarData();
+  });
+  ui["teacher-calendar-grid"].addEventListener("click", (event) => {
+    const cell = event.target.closest("button[data-calendar-date]");
+    if (!cell) {
+      return;
+    }
+    const markDate = cell.dataset.calendarDate;
+    if (!markDate) {
+      return;
+    }
+    void cycleTeacherCalendarMark(markDate);
+  });
 
   ui["reflection-form"].addEventListener("submit", (event) => {
     event.preventDefault();
@@ -549,6 +689,49 @@ function bindEvents() {
   ui["annot-undo-btn"].addEventListener("click", () => void undoAnnotation());
   ui["annot-clear-btn"].addEventListener("click", () => void clearAnnotation());
   ui["annot-save-btn"].addEventListener("click", () => void saveAnnotationImage());
+  ui["image-preview-close-btn"].addEventListener("click", closeImagePreview);
+  ui["image-preview-zoom-out-btn"].addEventListener("click", () => adjustPreviewZoom(-0.15));
+  ui["image-preview-zoom-in-btn"].addEventListener("click", () => adjustPreviewZoom(0.15));
+  ui["image-preview-rotate-left-btn"].addEventListener("click", () => rotatePreview(-90));
+  ui["image-preview-rotate-right-btn"].addEventListener("click", () => rotatePreview(90));
+  ui["image-preview-flip-x-btn"].addEventListener("click", togglePreviewFlipX);
+  ui["image-preview-flip-y-btn"].addEventListener("click", togglePreviewFlipY);
+  ui["image-preview-reset-btn"].addEventListener("click", resetImagePreviewTransform);
+  ui["image-preview-open-annot-btn"].addEventListener("click", openCurrentPreviewInAnnotator);
+  ui["image-preview-modal"].addEventListener("click", (event) => {
+    if (event.target === ui["image-preview-modal"]) {
+      closeImagePreview();
+    }
+  });
+  ui["annot-modal"].addEventListener("click", (event) => {
+    if (event.target === ui["annot-modal"]) {
+      closeAnnotationModal();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".message-hub")) {
+      hideMessagePanel();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+    hideMessagePanel();
+    if (previewState.open) {
+      closeImagePreview();
+      return;
+    }
+    if (annotState.open) {
+      closeAnnotationModal();
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      void loadMessages(true);
+    }
+  });
 
   bindCanvasDrawingEvents();
 }
@@ -570,7 +753,6 @@ function fillDefaultDates() {
   const today = toIsoDate(new Date());
   ui["study-date"].value = today;
   ui["teacher-date"].value = today;
-  ui["audit-date"].value = today;
   ui["reflection-date"].value = today;
   ui["reflection-filter-date"].value = today;
   ui["translation-teacher-date"].value = today;
@@ -678,6 +860,7 @@ function showPage(requestedPage) {
 
   activePage = page;
   sessionStorage.setItem(`cet4_active_page_${role}`, page);
+  hideMessagePanel();
 
   ui["student-panel"].classList.add("hidden");
   ui["teacher-panel"].classList.add("hidden");
@@ -689,12 +872,15 @@ function showPage(requestedPage) {
 
   if (page === "student-home" || page === "teammate-home") {
     ui["student-panel"].classList.remove("hidden");
+    void loadCurrentSubmissionImages();
   } else if (page === "teacher-review" || page === "teammate-review") {
     ui["teacher-panel"].classList.remove("hidden");
+    void loadTeacherCalendarData();
   } else if (page === "student-history" || page === "teammate-history") {
     ui["history-panel"].classList.remove("hidden");
     renderHistoryModuleTabs();
     renderHistoryList();
+    void loadStudentCalendarData();
   } else if (page === "student-reflection" || page === "teacher-reflection" || page === "teammate-reflection") {
     ui["reflection-panel"].classList.remove("hidden");
     if (page === "student-reflection") {
@@ -750,8 +936,11 @@ async function syncSessionUi() {
     essayChatHistory = [];
     clearEssayPendingImages();
     resetTranslationState();
+    resetMessageState();
+    hasShownSubmissionDraftRestore = false;
     renderEssayChatLog();
     resetStudentImageState();
+    closeImagePreview();
     closeAnnotationModal();
     setSessionBadge(false);
     ui["auth-panel"].classList.remove("hidden");
@@ -806,6 +995,8 @@ async function syncSessionUi() {
   }
 
   await refreshData();
+  startMessagePolling();
+  void loadMessages(true);
 }
 
 async function ensureProfile() {
@@ -862,6 +1053,789 @@ function setSessionBadge(online) {
   badge.classList.toggle("online", online);
   badge.classList.toggle("offline", !online);
   badge.textContent = online ? "在线" : "未登录";
+}
+
+function getSubmissionDraftKey() {
+  const uid = currentSession?.user?.id;
+  return uid ? `${SUBMISSION_DRAFT_PREFIX}_${uid}` : "";
+}
+
+function getReviewDraftKey(submissionId) {
+  const uid = currentSession?.user?.id;
+  return uid && submissionId ? `${REVIEW_DRAFT_PREFIX}_${uid}_${submissionId}` : "";
+}
+
+function readCurrentSubmissionDraft() {
+  return {
+    studyDate: ui["study-date"].value,
+    module: ui["study-module"].value,
+    content: ui["study-content"].value,
+    wordSummary: ui["word-summary"].value,
+    mistakeSummary: ui["mistake-summary"].value,
+    pendingImageCount: pendingImages.length,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function updateSubmissionDraftState(draft = null, synced = false) {
+  const el = ui["submission-draft-state"];
+  if (!el) {
+    return;
+  }
+
+  if (!draft) {
+    el.textContent = "文字和待上传图片会自动保存为草稿，刷新后可继续编辑。";
+    return;
+  }
+
+  const when = formatDateTime(draft.updatedAt);
+  const imageText = draft.pendingImageCount > 0 ? `，待上传图片 ${draft.pendingImageCount} 张也已保留` : "";
+  el.textContent = `${synced ? "本地草稿已更新" : "已恢复本地草稿"}：${draft.studyDate || "-"} / ${MODULE_LABELS[draft.module] ?? draft.module ?? "-"} · ${when}${imageText}。`;
+}
+
+function scheduleSubmissionDraftSync() {
+  if (suppressSubmissionDraftSync || !currentSession) {
+    return;
+  }
+  if (submissionDraftTimer) {
+    window.clearTimeout(submissionDraftTimer);
+  }
+  submissionDraftTimer = window.setTimeout(() => {
+    void syncSubmissionDraftNow();
+  }, 260);
+}
+
+async function syncSubmissionDraftNow() {
+  if (suppressSubmissionDraftSync || !currentSession || (currentProfile?.role !== "student" && currentProfile?.role !== "teammate")) {
+    return;
+  }
+
+  if (submissionDraftTimer) {
+    window.clearTimeout(submissionDraftTimer);
+    submissionDraftTimer = 0;
+  }
+
+  const key = getSubmissionDraftKey();
+  if (!key) {
+    return;
+  }
+
+  const draft = readCurrentSubmissionDraft();
+  localStorage.setItem(key, JSON.stringify(draft));
+  await persistSubmissionDraftAssets();
+  updateSubmissionDraftState(draft, true);
+}
+
+async function restoreSubmissionDraft() {
+  const key = getSubmissionDraftKey();
+  if (!key) {
+    updateSubmissionDraftState(null);
+    return;
+  }
+
+  const raw = localStorage.getItem(key);
+  let draft = null;
+  if (raw) {
+    try {
+      draft = JSON.parse(raw);
+    } catch (_error) {
+      localStorage.removeItem(key);
+    }
+  }
+
+  suppressSubmissionDraftSync = true;
+  try {
+    if (draft) {
+      ui["study-date"].value = draft.studyDate || ui["study-date"].value;
+      ui["study-module"].value = draft.module || ui["study-module"].value;
+      ui["study-content"].value = draft.content || "";
+      ui["word-summary"].value = draft.wordSummary || "";
+      ui["mistake-summary"].value = draft.mistakeSummary || "";
+      updateSubmissionDraftState(draft, false);
+    } else {
+      ui["study-content"].value = "";
+      ui["word-summary"].value = "";
+      ui["mistake-summary"].value = "";
+      updateSubmissionDraftState(null);
+    }
+
+    const files = await loadSubmissionDraftAssets();
+    if (files.length) {
+      setPendingImagesFromFiles(files);
+    } else {
+      clearPendingImages();
+    }
+    if (!hasShownSubmissionDraftRestore && draft && (draft.content || draft.wordSummary || draft.mistakeSummary || files.length > 0)) {
+      hasShownSubmissionDraftRestore = true;
+      showAlert("已恢复上次未完成的作业草稿。", "info", 2800, true);
+    }
+  } finally {
+    suppressSubmissionDraftSync = false;
+  }
+}
+
+async function clearSubmissionDraft(resetFields = false) {
+  const key = getSubmissionDraftKey();
+  if (!key) {
+    return;
+  }
+
+  if (resetFields && !confirmAction("确认清空当前作业草稿？本地文字和待上传图片都会删除。")) {
+    return;
+  }
+
+  localStorage.removeItem(key);
+  await clearSubmissionDraftAssets();
+  updateSubmissionDraftState(null);
+
+  if (resetFields) {
+    suppressSubmissionDraftSync = true;
+    try {
+      ui["study-content"].value = "";
+      ui["word-summary"].value = "";
+      ui["mistake-summary"].value = "";
+      clearPendingImages();
+    } finally {
+      suppressSubmissionDraftSync = false;
+    }
+    showAlert("本地作业草稿已清空。", "info", 2600, true);
+  }
+}
+
+function readCurrentReviewDraft() {
+  return {
+    submissionId: selectedSubmissionId,
+    status: ui["review-status"].value,
+    score: ui["review-score"].value,
+    comment: ui["review-comment"].value,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function updateReviewDraftState(draft = null, synced = false) {
+  const el = ui["review-draft-state"];
+  if (!el) {
+    return;
+  }
+
+  if (!selectedSubmissionId) {
+    el.textContent = "当前批改内容会自动暂存，本地刷新后可恢复。";
+    return;
+  }
+
+  if (!draft) {
+    el.textContent = "当前批改内容会自动暂存，本地刷新后可恢复。";
+    return;
+  }
+
+  el.textContent = `${synced ? "本地批改草稿已更新" : "已恢复本地批改草稿"}：${formatDateTime(draft.updatedAt)}。`;
+}
+
+function scheduleReviewDraftSync() {
+  if (suppressReviewDraftSync || !selectedSubmissionId || !currentSession) {
+    return;
+  }
+  if (reviewDraftTimer) {
+    window.clearTimeout(reviewDraftTimer);
+  }
+  reviewDraftTimer = window.setTimeout(() => {
+    syncReviewDraftNow();
+  }, 220);
+}
+
+function syncReviewDraftNow() {
+  if (suppressReviewDraftSync || !selectedSubmissionId || !currentSession || !isReviewerProfile()) {
+    return;
+  }
+
+  if (reviewDraftTimer) {
+    window.clearTimeout(reviewDraftTimer);
+    reviewDraftTimer = 0;
+  }
+
+  const key = getReviewDraftKey(selectedSubmissionId);
+  if (!key) {
+    return;
+  }
+
+  const draft = readCurrentReviewDraft();
+  localStorage.setItem(key, JSON.stringify(draft));
+  updateReviewDraftState(draft, true);
+}
+
+function restoreReviewDraftForSelection() {
+  if (!selectedSubmissionId) {
+    updateReviewDraftState(null);
+    return;
+  }
+
+  const key = getReviewDraftKey(selectedSubmissionId);
+  const raw = key ? localStorage.getItem(key) : "";
+  if (!raw) {
+    updateReviewDraftState(null);
+    return;
+  }
+
+  try {
+    const draft = JSON.parse(raw);
+    suppressReviewDraftSync = true;
+    ui["review-status"].value = draft.status || ui["review-status"].value;
+    ui["review-score"].value = draft.score || ui["review-score"].value;
+    ui["review-comment"].value = draft.comment || ui["review-comment"].value;
+    updateReviewDraftState(draft, false);
+  } catch (_error) {
+    localStorage.removeItem(key);
+    updateReviewDraftState(null);
+  } finally {
+    suppressReviewDraftSync = false;
+  }
+}
+
+function clearReviewDraftBySubmission(submissionId) {
+  const key = getReviewDraftKey(submissionId);
+  if (key) {
+    localStorage.removeItem(key);
+  }
+  if (selectedSubmissionId === submissionId) {
+    updateReviewDraftState(null);
+  }
+}
+
+async function clearActiveReviewDraft() {
+  if (!selectedSubmissionId) {
+    return;
+  }
+  if (!confirmAction("确认清空当前批改的本地草稿？")) {
+    return;
+  }
+
+  clearReviewDraftBySubmission(selectedSubmissionId);
+  await selectSubmissionForReview(selectedSubmissionId);
+  showAlert("当前批改的本地草稿已清空。", "info", 2400, true);
+}
+
+function resetMessageState() {
+  stopMessagePolling();
+  hideMessagePanel();
+  unreadMessageCount = 0;
+  messageCache = [];
+  messagesFeatureReady = true;
+  renderMessageBell();
+  renderMessageList();
+}
+
+function startMessagePolling() {
+  stopMessagePolling();
+  if (!currentSession) {
+    return;
+  }
+  messagePollTimer = window.setInterval(() => {
+    void loadMessages(true);
+  }, MESSAGE_POLL_INTERVAL_MS);
+}
+
+function stopMessagePolling() {
+  if (messagePollTimer) {
+    window.clearInterval(messagePollTimer);
+    messagePollTimer = 0;
+  }
+}
+
+function toggleMessagePanel() {
+  if (!messagesFeatureReady) {
+    showAlert("消息提醒功能需要先执行最新的 schema.sql。", "error", 3600, true);
+    return;
+  }
+
+  ui["message-panel"].classList.toggle("hidden");
+  if (!ui["message-panel"].classList.contains("hidden")) {
+    void loadMessages(true);
+  }
+}
+
+function hideMessagePanel() {
+  ui["message-panel"].classList.add("hidden");
+}
+
+function renderMessageBell() {
+  const badge = ui["message-bell-badge"];
+  if (!badge) {
+    return;
+  }
+  if (!unreadMessageCount) {
+    badge.classList.add("hidden");
+    badge.textContent = "0";
+    return;
+  }
+  badge.classList.remove("hidden");
+  badge.textContent = unreadMessageCount > 99 ? "99+" : String(unreadMessageCount);
+}
+
+function renderMessageList() {
+  const holder = ui["message-list"];
+  if (!holder) {
+    return;
+  }
+
+  if (!messagesFeatureReady) {
+    holder.innerHTML = "<p class=\"muted\">当前数据库还没升级到新版消息结构，执行最新 schema.sql 后这里会自动启用。</p>";
+    renderMessageBell();
+    return;
+  }
+
+  if (!messageCache.length) {
+    holder.innerHTML = "<p class=\"muted\">暂时没有新消息。</p>";
+    renderMessageBell();
+    return;
+  }
+
+  holder.innerHTML = messageCache
+    .map((row) => {
+      const unread = !row.read_at;
+      const title = escapeHtml(messageEventTitle(row.event_type));
+      const body = escapeHtml(row.body || "");
+      const sender = escapeHtml(displayName(row.sender_id));
+      const when = escapeHtml(formatDateTime(row.created_at));
+      const page = escapeHtml(messagePageLabel(row.link_page));
+      return `
+        <article class="message-card ${unread ? "unread" : ""}">
+          <div class="message-card-head">
+            <span class="message-card-title">${title}</span>
+            <span class="message-card-time">${when}</span>
+          </div>
+          <p class="message-card-body">${body}</p>
+          <div class="message-card-actions">
+            <span class="message-card-tag">${sender} · ${page}</span>
+            <button class="btn btn-ghost btn-small" type="button" data-open-message-id="${row.id}" title="打开相关页面">${unread ? "查看并已读" : "查看"}</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  renderMessageBell();
+}
+
+async function loadMessages(silent = false) {
+  if (!currentSession) {
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("recipient_id", currentSession.user.id)
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  if (error) {
+    if (isMessageSchemaError(error)) {
+      messagesFeatureReady = false;
+      unreadMessageCount = 0;
+      messageCache = [];
+      renderMessageList();
+      return;
+    }
+    if (!silent) {
+      showAlert(`读取消息提醒失败: ${error.message}`, "error", 4800, true);
+    }
+    return;
+  }
+
+  messagesFeatureReady = true;
+  messageCache = data ?? [];
+  unreadMessageCount = messageCache.filter((item) => !item.read_at).length;
+  renderMessageList();
+}
+
+async function markMessageRead(messageId) {
+  const row = messageCache.find((item) => item.id === messageId);
+  if (!row || row.read_at || !messagesFeatureReady) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("id", messageId)
+    .eq("recipient_id", currentSession.user.id);
+
+  if (error) {
+    if (!isMessageSchemaError(error)) {
+      showAlert(`标记消息已读失败: ${error.message}`, "error", 4200, true);
+    }
+    return;
+  }
+
+  row.read_at = new Date().toISOString();
+  unreadMessageCount = Math.max(0, unreadMessageCount - 1);
+  renderMessageList();
+}
+
+async function markAllMessagesRead() {
+  if (!messageCache.length || !messagesFeatureReady) {
+    return;
+  }
+
+  const unreadIds = messageCache.filter((item) => !item.read_at).map((item) => item.id);
+  if (!unreadIds.length) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .in("id", unreadIds)
+    .eq("recipient_id", currentSession.user.id);
+
+  if (error) {
+    showAlert(`全部已读失败: ${error.message}`, "error", 4200, true);
+    return;
+  }
+
+  const readAt = new Date().toISOString();
+  messageCache = messageCache.map((item) => ({ ...item, read_at: item.read_at || readAt }));
+  unreadMessageCount = 0;
+  renderMessageList();
+}
+
+async function openMessage(messageId) {
+  const row = messageCache.find((item) => item.id === messageId);
+  if (!row) {
+    return;
+  }
+  await markMessageRead(messageId);
+  hideMessagePanel();
+  if (row.link_page) {
+    showPage(row.link_page);
+    if ((row.link_page === "teacher-review" || row.link_page === "teammate-review") && row.related_submission_id) {
+      await loadTeacherData(true);
+      await selectSubmissionForReview(row.related_submission_id);
+    }
+  }
+}
+
+function renderTeacherCalendarStudentOptions(users = [...allProfiles.values()]) {
+  const select = ui["calendar-student"];
+  if (!select) {
+    return;
+  }
+
+  const current = select.value;
+  const students = users.filter((item) => item.role !== "teacher");
+  select.innerHTML = "";
+
+  if (!students.length) {
+    select.innerHTML = "<option value=\"\">暂无学生</option>";
+    return;
+  }
+
+  students.forEach((user) => {
+    const option = document.createElement("option");
+    option.value = user.id;
+    option.textContent = describeUser(user);
+    select.appendChild(option);
+  });
+
+  if ([...select.options].some((item) => item.value === current)) {
+    select.value = current;
+  }
+}
+
+async function loadStudentCalendarData() {
+  if (!currentSession || (currentProfile?.role !== "student" && currentProfile?.role !== "teammate")) {
+    return;
+  }
+
+  const result = await loadCalendarDataForStudent(currentSession.user.id, studentCalendarCursor);
+  if (!result) {
+    renderStudentCalendar();
+    return;
+  }
+
+  studentCalendarMarks = result.marks;
+  studentCalendarSubmissionCounts = result.countMap;
+  renderStudentCalendar();
+}
+
+async function loadTeacherCalendarData() {
+  if (!currentSession || (currentProfile?.role !== "teacher" && currentProfile?.role !== "teammate")) {
+    return;
+  }
+
+  const studentId = ui["calendar-student"].value;
+  if (!studentId) {
+    teacherCalendarMarks = [];
+    teacherCalendarSubmissionCounts = new Map();
+    renderTeacherCalendar();
+    return;
+  }
+
+  const result = await loadCalendarDataForStudent(studentId, teacherCalendarCursor);
+  if (!result) {
+    renderTeacherCalendar();
+    return;
+  }
+
+  teacherCalendarMarks = result.marks;
+  teacherCalendarSubmissionCounts = result.countMap;
+  renderTeacherCalendar();
+}
+
+async function loadCalendarDataForStudent(studentId, monthDate) {
+  if (!studentId) {
+    return {
+      marks: [],
+      countMap: new Map(),
+    };
+  }
+
+  const { start, end } = getMonthRange(monthDate);
+  const [marksResp, submissionsResp] = await Promise.all([
+    supabase
+      .from("calendar_marks")
+      .select("*")
+      .eq("student_id", studentId)
+      .gte("mark_date", start)
+      .lte("mark_date", end)
+      .order("mark_date", { ascending: true }),
+    supabase
+      .from("submissions")
+      .select("study_date,module")
+      .eq("student_id", studentId)
+      .gte("study_date", start)
+      .lte("study_date", end),
+  ]);
+
+  if (marksResp.error) {
+    if (isCalendarSchemaError(marksResp.error)) {
+      calendarFeatureReady = false;
+      return null;
+    }
+    showAlert(`读取打卡日历失败: ${marksResp.error.message}`, "error", 4800, true);
+    return null;
+  }
+
+  if (submissionsResp.error) {
+    showAlert(`读取打卡提交统计失败: ${submissionsResp.error.message}`, "error", 4800, true);
+    return null;
+  }
+
+  calendarFeatureReady = true;
+  return {
+    marks: marksResp.data ?? [],
+    countMap: buildSubmissionCountMap(submissionsResp.data ?? []),
+  };
+}
+
+function renderStudentCalendar() {
+  ui["student-calendar-label"].textContent = formatMonthLabel(studentCalendarCursor);
+  renderCalendarGrid(
+    ui["student-calendar-grid"],
+    studentCalendarCursor,
+    studentCalendarMarks,
+    studentCalendarSubmissionCounts,
+    false
+  );
+}
+
+function renderTeacherCalendar() {
+  ui["teacher-calendar-label"].textContent = formatMonthLabel(teacherCalendarCursor);
+  if (!ui["calendar-student"].value) {
+    ui["teacher-calendar-grid"].innerHTML = "<p class=\"muted\">先选择一位学生，再给对应日期做打卡标记。</p>";
+    return;
+  }
+  renderCalendarGrid(
+    ui["teacher-calendar-grid"],
+    teacherCalendarCursor,
+    teacherCalendarMarks,
+    teacherCalendarSubmissionCounts,
+    true
+  );
+}
+
+function renderCalendarGrid(holder, monthDate, marks, countMap, editable) {
+  if (!holder) {
+    return;
+  }
+
+  if (!calendarFeatureReady) {
+    holder.innerHTML = "<p class=\"muted\">当前数据库还没升级到新版打卡日历，执行最新 schema.sql 后这里会自动启用。</p>";
+    return;
+  }
+
+  const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+  const markMap = new Map((marks ?? []).map((row) => [row.mark_date, row]));
+  const cells = buildCalendarCells(monthDate);
+  const today = toIsoDate(new Date());
+
+  holder.innerHTML = [
+    ...weekdays.map((day) => `<div class="calendar-weekday">${day}</div>`),
+    ...cells.map((cell) => {
+      if (!cell.iso) {
+        return "<div class=\"calendar-cell is-empty\" aria-hidden=\"true\"></div>";
+      }
+      const row = markMap.get(cell.iso);
+      const kind = normalizeCalendarMarkKind(row?.kind);
+      const count = countMap.get(cell.iso) || 0;
+      const classes = [
+        "calendar-cell",
+        cell.iso === today ? "is-today" : "",
+      ].filter(Boolean).join(" ");
+      const markHtml = kind === "none"
+        ? "<span class=\"calendar-mark\"></span>"
+        : `<span class="calendar-mark kind-${kind}" title="${CALENDAR_MARK_LABELS[kind] ?? kind}"></span>`;
+      const countHtml = count > 0 ? `<span class="calendar-count-badge">${count}</span>` : "";
+      const inner = `
+        <span class="calendar-cell-head">
+          <span class="calendar-cell-day">${cell.day}</span>
+          <span class="calendar-cell-submissions">${count > 0 ? `${count} 模块` : "未提交"}</span>
+        </span>
+        ${markHtml}
+        ${countHtml}
+      `;
+      if (!editable) {
+        return `<article class="${classes}">${inner}</article>`;
+      }
+      return `<button class="${classes}" type="button" data-calendar-date="${cell.iso}" title="点击切换老师标记">${inner}</button>`;
+    }),
+  ].join("");
+}
+
+async function cycleTeacherCalendarMark(markDate) {
+  if (!calendarFeatureReady) {
+    return;
+  }
+
+  const studentId = ui["calendar-student"].value;
+  if (!studentId) {
+    return;
+  }
+
+  const current = teacherCalendarMarks.find((row) => row.mark_date === markDate);
+  const currentKind = normalizeCalendarMarkKind(current?.kind);
+  const nextKind = nextCalendarMarkKind(currentKind);
+
+  if (nextKind === "none") {
+    if (!current?.id) {
+      return;
+    }
+    const { error } = await supabase
+      .from("calendar_marks")
+      .delete()
+      .eq("id", current.id);
+    if (error) {
+      showAlert(`删除日历标记失败: ${error.message}`, "error", 4200, true);
+      return;
+    }
+    teacherCalendarMarks = teacherCalendarMarks.filter((row) => row.id !== current.id);
+  } else {
+    const payload = {
+      student_id: studentId,
+      mark_date: markDate,
+      kind: nextKind,
+      marked_by: currentSession.user.id,
+    };
+    const { data, error } = await supabase
+      .from("calendar_marks")
+      .upsert(payload, { onConflict: "student_id,mark_date" })
+      .select("*")
+      .maybeSingle();
+    if (error) {
+      showAlert(`保存日历标记失败: ${error.message}`, "error", 4200, true);
+      return;
+    }
+    const saved = data || { ...payload, id: current?.id || `local_${markDate}` };
+    const exists = teacherCalendarMarks.some((row) => row.mark_date === markDate);
+    teacherCalendarMarks = exists
+      ? teacherCalendarMarks.map((row) => (row.mark_date === markDate ? { ...row, ...saved } : row))
+      : [...teacherCalendarMarks, saved];
+    if (studentId === currentSession.user.id) {
+      studentCalendarMarks = teacherCalendarMarks.slice();
+      renderStudentCalendar();
+    }
+  }
+
+  renderTeacherCalendar();
+}
+
+function openImagePreview(submissionId, sourceUrl) {
+  const row = submissionCache.find((item) => item.id === submissionId);
+  previewState.open = true;
+  previewState.submissionId = submissionId;
+  previewState.sourceUrl = sourceUrl;
+  previewState.rotation = 0;
+  previewState.scale = 1;
+  previewState.flipX = 1;
+  previewState.flipY = 1;
+  ui["image-preview-img"].src = sourceUrl;
+  ui["image-preview-title"].textContent = row
+    ? `作业图片预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
+    : "作业图片预览";
+  ui["image-preview-modal"].classList.remove("hidden");
+  applyImagePreviewTransform();
+}
+
+function closeImagePreview() {
+  previewState.open = false;
+  previewState.submissionId = null;
+  previewState.sourceUrl = "";
+  resetImagePreviewTransform(false);
+  ui["image-preview-img"].removeAttribute("src");
+  ui["image-preview-title"].textContent = "作业图片预览";
+  ui["image-preview-modal"].classList.add("hidden");
+}
+
+function applyImagePreviewTransform() {
+  const img = ui["image-preview-img"];
+  if (!img) {
+    return;
+  }
+  img.style.transform = `rotate(${previewState.rotation}deg) scale(${previewState.scale * previewState.flipX}, ${previewState.scale * previewState.flipY})`;
+}
+
+function adjustPreviewZoom(delta) {
+  previewState.scale = Math.min(3.2, Math.max(0.4, previewState.scale + delta));
+  applyImagePreviewTransform();
+}
+
+function rotatePreview(delta) {
+  previewState.rotation = (previewState.rotation + delta + 360) % 360;
+  applyImagePreviewTransform();
+}
+
+function togglePreviewFlipX() {
+  previewState.flipX *= -1;
+  applyImagePreviewTransform();
+}
+
+function togglePreviewFlipY() {
+  previewState.flipY *= -1;
+  applyImagePreviewTransform();
+}
+
+function resetImagePreviewTransform(updateUi = true) {
+  previewState.rotation = 0;
+  previewState.scale = 1;
+  previewState.flipX = 1;
+  previewState.flipY = 1;
+  if (updateUi) {
+    applyImagePreviewTransform();
+  }
+}
+
+function openCurrentPreviewInAnnotator() {
+  if (!previewState.open || !previewState.submissionId || !previewState.sourceUrl) {
+    return;
+  }
+  const submissionId = previewState.submissionId;
+  const sourceUrl = previewState.sourceUrl;
+  closeImagePreview();
+  void openAnnotationModal(submissionId, sourceUrl);
+}
+
+function isReviewerProfile() {
+  return currentProfile?.role === "teacher" || currentProfile?.role === "teammate";
 }
 
 async function signUp() {
@@ -961,8 +1935,11 @@ async function refreshData() {
     if (ui["existing-images-panel"]) {
       ui["existing-images-panel"].open = false;
     }
+    await restoreSubmissionDraft();
     await Promise.all([
       loadStudentData(),
+      loadCurrentSubmissionImages(),
+      loadStudentCalendarData(),
       loadStudentReflections(),
       loadTranslationPromptCatalog(),
       loadMyTranslationAttempts(),
@@ -973,7 +1950,7 @@ async function refreshData() {
     resetTeacherTranslationEditor();
     await Promise.all([
       loadTeacherData(),
-      loadTeacherFines(),
+      loadTeacherCalendarData(),
       loadTeacherReflections(),
       loadTranslationPromptCatalog(),
       loadTeacherTranslationAttempts(),
@@ -986,9 +1963,13 @@ async function refreshData() {
       ui["existing-images-panel"].open = false;
     }
     clearReviewEditor();
+    await restoreSubmissionDraft();
     await Promise.all([
       loadStudentData(),
+      loadCurrentSubmissionImages(),
+      loadStudentCalendarData(),
       loadTeacherData(),
+      loadTeacherCalendarData(),
       loadTeacherReflections(),
       loadTranslationPromptCatalog(),
       loadMyTranslationAttempts(),
@@ -1045,8 +2026,10 @@ function refreshRoleUi() {
 
   if (isReviewer) {
     renderReflectionStudentOptions(users);
-    renderAuditStudentOptions();
+    renderTeacherCalendarStudentOptions(users);
     renderTranslationTeacherStudentOptions(users);
+  } else {
+    ui["calendar-student"].innerHTML = "";
   }
 }
 
@@ -2788,10 +3771,11 @@ function appendStudyImageFiles(picked) {
 
   ui["study-images"].value = "";
   renderPendingImages();
+  scheduleSubmissionDraftSync();
 }
 
 async function onStudentSlotChanged() {
-  clearPendingImages();
+  scheduleSubmissionDraftSync();
   await loadCurrentSubmissionImages();
 }
 
@@ -2803,6 +3787,7 @@ function removePendingImage(pendingId) {
   URL.revokeObjectURL(pendingImages[index].previewUrl);
   pendingImages.splice(index, 1);
   renderPendingImages();
+  scheduleSubmissionDraftSync();
 }
 
 function removeExistingImage(index) {
@@ -2820,6 +3805,7 @@ function removeExistingImage(index) {
   }
   existingImages.splice(index, 1);
   renderExistingImages();
+  scheduleSubmissionDraftSync();
 }
 
 function renderPendingImages() {
@@ -3040,10 +4026,11 @@ function renderUploadProgress(event) {
     const ratio = Math.min(0.92, 0.35 + ((event.done || 0) + active * 0.2) / total * 0.58);
     const uploaded = formatBytes(event.uploadedBytes || 0);
     const packedTotal = formatBytes(event.preparedBytesTotal || 0);
+    const concurrency = Math.max(1, event.concurrency || UPLOAD_CONCURRENCY);
     showUploadProgress({
       text: `上传图片 ${Math.min(event.done || 0, total)}/${total}`,
       ratio,
-      meta: `已上传 ${uploaded} / ${packedTotal}（并发 ${UPLOAD_CONCURRENCY}，失败 ${failed}）`,
+      meta: `已上传 ${uploaded} / ${packedTotal}（并发 ${concurrency}，失败 ${failed}）`,
       status: "active",
     });
     return;
@@ -3090,6 +4077,7 @@ function clearPendingImages() {
 function setPendingImagesFromFiles(files) {
   clearPendingImages();
   if (!files?.length) {
+    scheduleSubmissionDraftSync();
     return;
   }
 
@@ -3107,6 +4095,7 @@ function setPendingImagesFromFiles(files) {
     ui["study-images"].value = "";
   }
   renderPendingImages();
+  scheduleSubmissionDraftSync();
 }
 
 function resetStudentImageState() {
@@ -3233,34 +4222,12 @@ async function saveSubmission() {
       review_status: "pending",
     };
 
-    const { error: upsertError } = await runWithRetry(
-      async (attempt, maxAttempts) => {
-        if (attempt > 0 && hasNewImages) {
-          showUploadProgress({
-            text: `写入提交记录重试 ${attempt + 1}/${maxAttempts}`,
-            ratio: 0.97,
-            meta: "图片已上传，正在写入数据库。",
-            status: "active",
-          });
-        }
-        return await withTimeout(
-          supabase.from("submissions").upsert(upsertPayload, { onConflict: "student_id,study_date,module" }),
-          22000,
-          "写入提交记录超时"
-        );
-      },
-      {
-        retries: UPSERT_MAX_RETRY,
-        baseDelayMs: 700,
-        shouldRetry: (error) => isRetryableError(error),
-      }
-    );
-
-    if (upsertError) {
+    const writeResult = await saveSubmissionRecordWithVerification(upsertPayload, hasNewImages);
+    if (writeResult.error) {
       if (uploadResult.paths.length > 0) {
         await supabase.storage.from(SUBMISSION_BUCKET).remove(uploadResult.paths);
       }
-      throw upsertError;
+      throw writeResult.error;
     }
 
     if (removedStoragePaths.length > 0) {
@@ -3304,20 +4271,25 @@ async function saveSubmission() {
       }
       const first = failedUploads[0];
       showAlert(
-        `已提交文字内容；仍有 ${failedCount} 张图片未传成功（示例：${first?.name || "图片"}）。可直接点“提交本模块”重试失败图片。`,
+        `已提交文字内容；仍有 ${failedCount} 张图片未传成功（示例：${first?.name || "图片"}）。可直接点“提交本模块”重试失败图片。${writeResult.recovered ? " 本次写入已自动校验成功。" : ""}`,
         "error",
         7600
       );
     } else {
-      ui["study-content"].value = "";
-      ui["word-summary"].value = "";
-      ui["mistake-summary"].value = "";
-      resetStudentImageState();
+      existingImages = finalImageUrls.map((url) => ({
+        url,
+        storagePath: extractSubmissionStoragePath(url),
+      }));
+      removedStoragePaths = [];
+      clearPendingImages();
+      renderExistingImages();
+      hideUploadProgress();
       if (ui["existing-images-panel"]) {
         ui["existing-images-panel"].open = false;
       }
-      showAlert("提交成功。", "info");
+      showAlert(writeResult.recovered ? "提交成功，网络较慢但系统已自动校验写入成功。" : "提交成功。", "info");
     }
+    await syncSubmissionDraftNow();
     await loadStudentData();
   }).catch((error) => {
     if (usedUploadPanel) {
@@ -3330,6 +4302,199 @@ async function saveSubmission() {
     }
     showAlert(error.message || "提交失败", "error");
   });
+}
+
+async function saveSubmissionRecordWithVerification(payload, hasNewImages) {
+  const response = await runWithRetry(
+    async (attempt, maxAttempts) => {
+      if (attempt > 0 && hasNewImages) {
+        showUploadProgress({
+          text: `写入提交记录重试 ${attempt + 1}/${maxAttempts}`,
+          ratio: 0.97,
+          meta: "图片已上传，正在写入数据库。",
+          status: "active",
+        });
+      }
+      return await withTimeout(
+        supabase
+          .from("submissions")
+          .upsert(payload, { onConflict: "student_id,study_date,module" })
+          .select("*")
+          .maybeSingle(),
+        22000,
+        "写入提交记录超时"
+      );
+    },
+    {
+      retries: UPSERT_MAX_RETRY,
+      baseDelayMs: 700,
+      shouldRetry: (error) => isRetryableError(error),
+    }
+  );
+
+  if (!response?.error) {
+    return { data: response.data ?? null, recovered: false, error: null };
+  }
+
+  const verified = await verifySubmissionRecord(payload);
+  if (verified) {
+    return { data: verified, recovered: true, error: null };
+  }
+  return { data: null, recovered: false, error: response.error };
+}
+
+async function verifySubmissionRecord(payload) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await withTimeout(
+      supabase
+        .from("submissions")
+        .select("*")
+        .eq("student_id", payload.student_id)
+        .eq("study_date", payload.study_date)
+        .eq("module", payload.module)
+        .maybeSingle(),
+      12000,
+      "校验提交记录超时"
+    ).catch((queryError) => ({ data: null, error: queryError }));
+
+    if (!error && submissionMatchesPayload(data, payload)) {
+      return data;
+    }
+    await sleep(420 * (attempt + 1));
+  }
+  return null;
+}
+
+function submissionMatchesPayload(row, payload) {
+  if (!row || !payload) {
+    return false;
+  }
+
+  return (
+    row.student_id === payload.student_id
+    && row.study_date === payload.study_date
+    && row.module === payload.module
+    && String(row.content || "").trim() === String(payload.content || "").trim()
+    && String(row.word_summary || "") === String(payload.word_summary || "")
+    && String(row.mistake_summary || "") === String(payload.mistake_summary || "")
+    && String(row.review_status || "pending") === String(payload.review_status || "pending")
+    && arraysEqual(row.image_urls ?? [], payload.image_urls ?? [])
+  );
+}
+
+async function saveReviewRecordWithVerification(payload) {
+  const response = await runWithRetry(
+    () =>
+      withTimeout(
+        supabase
+          .from("reviews")
+          .upsert(payload, { onConflict: "submission_id" })
+          .select("*")
+          .maybeSingle(),
+        22000,
+        "保存批改记录超时"
+      ),
+    {
+      retries: UPSERT_MAX_RETRY,
+      baseDelayMs: 680,
+      shouldRetry: (error) => isRetryableError(error),
+    }
+  );
+
+  if (!response?.error) {
+    return { data: response.data ?? null, recovered: false, error: null };
+  }
+
+  const verified = await verifyReviewRecord(payload);
+  if (verified) {
+    return { data: verified, recovered: true, error: null };
+  }
+  return { data: null, recovered: false, error: response.error };
+}
+
+async function verifyReviewRecord(payload) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await withTimeout(
+      supabase
+        .from("reviews")
+        .select("*")
+        .eq("submission_id", payload.submission_id)
+        .maybeSingle(),
+      12000,
+      "校验批改记录超时"
+    ).catch((queryError) => ({ data: null, error: queryError }));
+
+    if (!error && reviewMatchesPayload(data, payload)) {
+      return data;
+    }
+    await sleep(420 * (attempt + 1));
+  }
+  return null;
+}
+
+function reviewMatchesPayload(row, payload) {
+  if (!row || !payload) {
+    return false;
+  }
+
+  return (
+    row.submission_id === payload.submission_id
+    && row.teacher_id === payload.teacher_id
+    && Number(row.score) === Number(payload.score)
+    && String(row.status || "") === String(payload.status || "")
+    && String(row.comment || "").trim() === String(payload.comment || "").trim()
+  );
+}
+
+async function updateSubmissionReviewStatusWithVerification(submissionId, status) {
+  const response = await runWithRetry(
+    () =>
+      withTimeout(
+        supabase
+          .from("submissions")
+          .update({ review_status: status })
+          .eq("id", submissionId)
+          .select("id,review_status")
+          .maybeSingle(),
+        22000,
+        "更新提交状态超时"
+      ),
+    {
+      retries: UPSERT_MAX_RETRY,
+      baseDelayMs: 680,
+      shouldRetry: (error) => isRetryableError(error),
+    }
+  );
+
+  if (!response?.error) {
+    return { data: response.data ?? null, recovered: false, error: null };
+  }
+
+  const verified = await verifySubmissionStatus(submissionId, status);
+  if (verified) {
+    return { data: verified, recovered: true, error: null };
+  }
+  return { data: null, recovered: false, error: response.error };
+}
+
+async function verifySubmissionStatus(submissionId, status) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await withTimeout(
+      supabase
+        .from("submissions")
+        .select("id,review_status")
+        .eq("id", submissionId)
+        .maybeSingle(),
+      12000,
+      "校验提交状态超时"
+    ).catch((queryError) => ({ data: null, error: queryError }));
+
+    if (!error && data?.id === submissionId && data?.review_status === status) {
+      return data;
+    }
+    await sleep(420 * (attempt + 1));
+  }
+  return null;
 }
 
 async function uploadSubmissionImages(studentId, studyDate, module, files, onProgress = () => {}) {
@@ -3358,9 +4523,10 @@ async function uploadSubmissionImages(studentId, studyDate, module, files, onPro
   let prepareNextIndex = 0;
   let activeUploads = 0;
   const failedItems = [];
+  const prepareWorkerCount = getAdaptivePrepareConcurrency(files.length);
 
   const prepareWorkers = Array.from(
-    { length: Math.min(PREPARE_CONCURRENCY, files.length) },
+    { length: Math.min(prepareWorkerCount, files.length) },
     async () => {
       while (true) {
         const idx = prepareNextIndex;
@@ -3385,6 +4551,7 @@ async function uploadSubmissionImages(studentId, studyDate, module, files, onPro
             rawBytes: preparedRawBytes,
             preparedBytes,
           });
+          await yieldToUi();
         } catch (error) {
           failedCount += 1;
           const userName = fileLabelForUser(rawFile.name, idx);
@@ -3403,6 +4570,7 @@ async function uploadSubmissionImages(studentId, studyDate, module, files, onPro
             currentName: userName,
             error: toErrorMessage(error),
           });
+          await yieldToUi();
         }
       }
     }
@@ -3438,8 +4606,7 @@ async function uploadSubmissionImages(studentId, studyDate, module, files, onPro
   const batchStamp = Date.now();
   let nextQueueIndex = 0;
   let uploadedBytes = 0;
-
-  const workerCount = Math.min(UPLOAD_CONCURRENCY, preparedQueue.length);
+  const workerCount = Math.min(getAdaptiveUploadConcurrency(preparedQueue.length), preparedQueue.length);
   const workers = Array.from({ length: workerCount }, async () => {
     while (true) {
       const queueIndex = nextQueueIndex;
@@ -3458,6 +4625,7 @@ async function uploadSubmissionImages(studentId, studyDate, module, files, onPro
         failed: failedCount,
         total: files.length,
         active: activeUploads,
+        concurrency: workerCount,
         currentName: fileLabelForUser(prepared.name, index),
       });
 
@@ -3485,9 +4653,11 @@ async function uploadSubmissionImages(studentId, studyDate, module, files, onPro
           failed: failedCount,
           total: files.length,
           active: activeUploads,
+          concurrency: workerCount,
           currentName: fallbackName,
           error: toErrorMessage(error),
         });
+        await yieldToUi();
         continue;
       }
 
@@ -3506,7 +4676,9 @@ async function uploadSubmissionImages(studentId, studyDate, module, files, onPro
         active: activeUploads,
         uploadedBytes,
         preparedBytesTotal: preparedBytes,
+        concurrency: workerCount,
       });
+      await yieldToUi();
     }
   });
 
@@ -3793,20 +4965,6 @@ async function loadStudentData() {
   myAnnotationMap = annotationMapBySubmission;
   renderHistoryModuleTabs();
   renderHistoryList();
-
-  const finesResp = await supabase
-    .from("fines")
-    .select("*")
-    .eq("student_id", uid)
-    .order("fine_date", { ascending: false })
-    .limit(50);
-
-  if (finesResp.error) {
-    showAlert(`读取罚款失败: ${finesResp.error.message}`, "error");
-    return;
-  }
-
-  renderStudentFines(finesResp.data ?? []);
 }
 
 async function loadReviewMap(submissionIds) {
@@ -3920,26 +5078,6 @@ function renderHistoryList() {
     });
 }
 
-function renderStudentFines(fines) {
-  const body = ui["my-fines-body"];
-  body.innerHTML = "";
-
-  if (!fines.length) {
-    body.innerHTML = "<tr><td colspan=\"3\" class=\"muted\">暂无罚款记录。</td></tr>";
-    return;
-  }
-
-  for (const row of fines) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${row.fine_date}</td>
-      <td>${row.amount} 元</td>
-      <td>${escapeHtml(row.reason)}</td>
-    `;
-    body.appendChild(tr);
-  }
-}
-
 async function loadTeacherData(keepSelection = false) {
   const day = ui["teacher-date"].value;
   const module = ui["teacher-module"].value;
@@ -3973,7 +5111,7 @@ async function loadTeacherData(keepSelection = false) {
 
   renderTeacherSubmissionList();
   renderTeacherSavedReviewList();
-  renderAuditStudentOptions();
+  renderTeacherCalendarStudentOptions();
 
   if (keepSelection && selectedSubmissionId) {
     const exists = submissionCache.some((x) => x.id === selectedSubmissionId);
@@ -4168,17 +5306,22 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
 
   if (error) {
     showAlert(`读取历史批改失败: ${error.message}`, "error");
+    restoreReviewDraftForSelection();
     return;
   }
 
   if (data) {
     teacherReviewMap.set(submissionId, data);
-    ui["review-status"].value = data.status ?? "pending";
-    ui["review-score"].value = data.score ?? 80;
-    ui["review-comment"].value = data.comment ?? "";
+    if (!keepStatus) {
+      ui["review-status"].value = data.status ?? "pending";
+      ui["review-score"].value = data.score ?? 80;
+      ui["review-comment"].value = data.comment ?? "";
+    }
     ui["review-last-saved"].textContent = `最近提交：${formatDateTime(data.updated_at || data.created_at)}`;
     renderTeacherSavedReviewList();
   }
+
+  restoreReviewDraftForSelection();
 }
 
 function renderReviewImageActions(urls, submissionId) {
@@ -4191,17 +5334,25 @@ function renderReviewImageActions(urls, submissionId) {
       const safe = escapeAttr(url);
       const encoded = encodeURIComponent(url);
       return `<div class="thumb-edit">
-        <a href="${safe}" target="_blank" rel="noreferrer">
-          <img class="thumb-img" src="${safe}" alt="source" />
-        </a>
-        <button
-          type="button"
-          class="btn btn-ghost btn-small annot-btn"
-          data-open-annot="1"
-          data-submission-id="${submissionId}"
-          data-source-url="${encoded}"
-          title="打开圈画批注"
-        >圈画</button>
+        <img class="thumb-img" src="${safe}" alt="source" />
+        <div class="thumb-tool-row">
+          <button
+            type="button"
+            class="btn btn-ghost btn-small annot-btn"
+            data-open-preview="1"
+            data-submission-id="${submissionId}"
+            data-source-url="${encoded}"
+            title="打开大图预览"
+          >预览</button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-small annot-btn"
+            data-open-annot="1"
+            data-submission-id="${submissionId}"
+            data-source-url="${encoded}"
+            title="打开圈画批注"
+          >圈画</button>
+        </div>
       </div>`;
     })
     .join("");
@@ -4231,6 +5382,7 @@ function clearReviewEditor() {
   ui["review-score"].value = 80;
   ui["review-comment"].value = "";
   ui["review-last-saved"].textContent = "最近提交：-";
+  updateReviewDraftState(null);
 }
 
 async function saveReview() {
@@ -4256,56 +5408,21 @@ async function saveReview() {
     }
 
     showAlert("正在保存批改（写入评语与状态）...", "info", 1800, true);
-    const [reviewResp, submissionResp] = await Promise.all([
-      runWithRetry(
-        () =>
-          withTimeout(
-            supabase
-              .from("reviews")
-              .upsert(
-                {
-                  submission_id: selectedSubmissionId,
-                  teacher_id: currentSession.user.id,
-                  score,
-                  status,
-                  comment,
-                },
-                { onConflict: "submission_id" }
-              )
-              .select("*")
-              .maybeSingle(),
-            22000,
-            "保存批改记录超时"
-          ),
-        {
-          retries: UPSERT_MAX_RETRY,
-          baseDelayMs: 680,
-          shouldRetry: (error) => isRetryableError(error),
-        }
-      ),
-      runWithRetry(
-        () =>
-          withTimeout(
-            supabase
-              .from("submissions")
-              .update({ review_status: status })
-              .eq("id", selectedSubmissionId),
-            22000,
-            "更新提交状态超时"
-          ),
-        {
-          retries: UPSERT_MAX_RETRY,
-          baseDelayMs: 680,
-          shouldRetry: (error) => isRetryableError(error),
-        }
-      ),
-    ]);
-
-    if (reviewResp?.error) {
-      throw reviewResp.error;
+    const reviewPayload = {
+      submission_id: selectedSubmissionId,
+      teacher_id: currentSession.user.id,
+      score,
+      status,
+      comment,
+    };
+    const reviewResult = await saveReviewRecordWithVerification(reviewPayload);
+    if (reviewResult.error) {
+      throw reviewResult.error;
     }
-    if (submissionResp?.error) {
-      throw submissionResp.error;
+
+    const statusResult = await updateSubmissionReviewStatusWithVerification(selectedSubmissionId, status);
+    if (statusResult.error) {
+      throw statusResult.error;
     }
 
     const idx = submissionCache.findIndex((item) => item.id === selectedSubmissionId);
@@ -4315,25 +5432,31 @@ async function saveReview() {
         review_status: status,
       };
     }
-    const savedReview =
-      reviewResp?.data ||
-      {
-        submission_id: selectedSubmissionId,
-        teacher_id: currentSession.user.id,
-        score,
-        status,
-        comment,
-        updated_at: new Date().toISOString(),
-      };
+    const savedReview = reviewResult.data || {
+      submission_id: selectedSubmissionId,
+      teacher_id: currentSession.user.id,
+      score,
+      status,
+      comment,
+      updated_at: new Date().toISOString(),
+    };
     teacherReviewMap.set(selectedSubmissionId, savedReview);
     renderTeacherSubmissionList();
     renderTeacherSavedReviewList();
     ui["review-last-saved"].textContent =
       `最近提交：${formatDateTime(savedReview.updated_at || savedReview.created_at || new Date().toISOString())}`;
+    clearReviewDraftBySubmission(selectedSubmissionId);
 
     // Keep UX responsive: run full refresh in background.
     void loadTeacherData(true);
-    showAlert("批改保存成功，已进入“已提交批改记录”。", "info", 3400, true);
+    showAlert(
+      reviewResult.recovered || statusResult.recovered
+        ? "批改保存成功，网络较慢但系统已自动校验写入成功。"
+        : "批改保存成功，已进入“已提交批改记录”。",
+      "info",
+      3400,
+      true
+    );
   }).catch((error) => {
     showAlert(`批改保存失败: ${error.message}`, "error", 6500, true);
   });
@@ -4391,111 +5514,6 @@ async function deleteSubmissionAsAdmin(submissionId) {
   });
 }
 
-function renderAuditStudentOptions() {
-  const select = ui["audit-student"];
-  const students = [...allProfiles.values()].filter((x) => x.role === "student");
-  select.innerHTML = "";
-
-  if (!students.length) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "暂无学生";
-    select.appendChild(option);
-    return;
-  }
-
-  for (const student of students) {
-    const option = document.createElement("option");
-    option.value = student.id;
-    option.textContent = describeUser(student);
-    select.appendChild(option);
-  }
-}
-
-async function runAuditStudent() {
-  const studentId = ui["audit-student"].value;
-  const day = ui["audit-date"].value;
-
-  if (!studentId || !day) {
-    showAlert("请选择学生和日期。", "error");
-    return;
-  }
-
-  await withButtonBusy(ui["audit-student-btn"], "检查中...", async () => {
-    const { data, error } = await supabase.rpc("audit_student_day", {
-      p_student: studentId,
-      p_day: day,
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.id) {
-      showAlert(`已生成罚款 ${row.amount} 元。`, "info");
-    } else {
-      showAlert("当日已完成，无罚款。", "info");
-    }
-
-    await loadTeacherFines();
-  }).catch((error) => {
-    showAlert(`漏交检查失败: ${error.message}`, "error");
-  });
-}
-
-async function runAuditAll() {
-  const day = ui["audit-date"].value;
-  if (!day) {
-    showAlert("请选择检查日期。", "error");
-    return;
-  }
-
-  await withButtonBusy(ui["audit-all-btn"], "批量检查中...", async () => {
-    const { data, error } = await supabase.rpc("audit_all_students", { p_day: day });
-    if (error) {
-      throw error;
-    }
-
-    const count = Array.isArray(data) ? data.length : 0;
-    showAlert(`批量检查完成，命中 ${count} 条罚款。`, "info");
-    await loadTeacherFines();
-  }).catch((error) => {
-    showAlert(`批量检查失败: ${error.message}`, "error");
-  });
-}
-
-async function loadTeacherFines() {
-  const { data, error } = await supabase
-    .from("fines")
-    .select("*")
-    .order("fine_date", { ascending: false })
-    .limit(100);
-
-  if (error) {
-    showAlert(`读取罚款记录失败: ${error.message}`, "error");
-    return;
-  }
-
-  const body = ui["teacher-fines-body"];
-  body.innerHTML = "";
-
-  if (!(data ?? []).length) {
-    body.innerHTML = "<tr><td colspan=\"4\" class=\"muted\">暂无罚款记录。</td></tr>";
-    return;
-  }
-
-  for (const row of data) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(displayName(row.student_id))}</td>
-      <td>${row.fine_date}</td>
-      <td>${row.amount} 元</td>
-      <td>${escapeHtml(row.reason)}</td>
-    `;
-    body.appendChild(tr);
-  }
-}
 async function saveStudentReflection() {
   await withButtonBusy(ui["save-reflection-btn"], "提交中...", async () => {
     const date = ui["reflection-date"].value;
@@ -5158,6 +6176,246 @@ function sleep(ms) {
   });
 }
 
+function arraysEqual(left = [], right = []) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((item, index) => item === right[index]);
+}
+
+async function yieldToUi() {
+  await new Promise((resolve) => {
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => resolve());
+      return;
+    }
+    window.setTimeout(resolve, 0);
+  });
+}
+
+function getAdaptivePrepareConcurrency(fileCount = 0) {
+  if (fileCount >= 8) {
+    return 2;
+  }
+  return PREPARE_CONCURRENCY;
+}
+
+function getAdaptiveUploadConcurrency(fileCount = 0) {
+  const downlink = Number(window.navigator?.connection?.downlink || 0);
+  if (fileCount >= 7 || (downlink > 0 && downlink < 1.5)) {
+    return 1;
+  }
+  return UPLOAD_CONCURRENCY;
+}
+
+function openDraftDb() {
+  if (!("indexedDB" in window)) {
+    return Promise.resolve(null);
+  }
+  if (!draftDbPromise) {
+    draftDbPromise = new Promise((resolve, reject) => {
+      const request = window.indexedDB.open(DRAFT_DB_NAME, DRAFT_DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(DRAFT_DB_STORE)) {
+          db.createObjectStore(DRAFT_DB_STORE, { keyPath: "key" });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("打开草稿缓存失败"));
+    }).catch((_error) => null);
+  }
+  return draftDbPromise;
+}
+
+async function draftDbGet(key) {
+  const db = await openDraftDb();
+  if (!db || !key) {
+    return null;
+  }
+  return await new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_DB_STORE, "readonly");
+    const request = tx.objectStore(DRAFT_DB_STORE).get(key);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error || new Error("读取草稿缓存失败"));
+  }).catch(() => null);
+}
+
+async function draftDbPut(key, value) {
+  const db = await openDraftDb();
+  if (!db || !key) {
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_DB_STORE, "readwrite");
+    tx.objectStore(DRAFT_DB_STORE).put({ key, ...value });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("写入草稿缓存失败"));
+  }).catch(() => null);
+}
+
+async function draftDbDelete(key) {
+  const db = await openDraftDb();
+  if (!db || !key) {
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_DB_STORE, "readwrite");
+    tx.objectStore(DRAFT_DB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("删除草稿缓存失败"));
+  }).catch(() => null);
+}
+
+async function persistSubmissionDraftAssets() {
+  const key = getSubmissionDraftKey();
+  if (!key) {
+    return;
+  }
+  const images = pendingImages.map((item) => ({
+    id: item.id,
+    name: item.file.name,
+    type: item.file.type,
+    lastModified: item.file.lastModified || Date.now(),
+    blob: item.file,
+  }));
+  await draftDbPut(key, {
+    updatedAt: new Date().toISOString(),
+    images,
+  });
+}
+
+async function loadSubmissionDraftAssets() {
+  const key = getSubmissionDraftKey();
+  if (!key) {
+    return [];
+  }
+  const record = await draftDbGet(key);
+  const images = Array.isArray(record?.images) ? record.images : [];
+  return images
+    .map((item, index) => {
+      if (!item?.blob) {
+        return null;
+      }
+      const fileName = item.name || `draft_${index + 1}.jpg`;
+      return new File([item.blob], fileName, {
+        type: item.type || item.blob.type || "image/jpeg",
+        lastModified: item.lastModified || Date.now(),
+      });
+    })
+    .filter(Boolean);
+}
+
+async function clearSubmissionDraftAssets() {
+  const key = getSubmissionDraftKey();
+  if (!key) {
+    return;
+  }
+  await draftDbDelete(key);
+}
+
+function startOfMonth(date) {
+  const raw = date instanceof Date ? date : new Date(date);
+  return new Date(raw.getFullYear(), raw.getMonth(), 1);
+}
+
+function addMonths(date, diff) {
+  const raw = startOfMonth(date);
+  return new Date(raw.getFullYear(), raw.getMonth() + diff, 1);
+}
+
+function getMonthRange(date) {
+  const start = startOfMonth(date);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+  return {
+    start: toIsoDate(start),
+    end: toIsoDate(end),
+  };
+}
+
+function formatMonthLabel(date) {
+  const raw = startOfMonth(date);
+  return `${raw.getFullYear()}-${String(raw.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function buildCalendarCells(date) {
+  const monthStart = startOfMonth(date);
+  const firstWeekday = (monthStart.getDay() + 6) % 7;
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  const cells = [];
+
+  for (let i = 0; i < firstWeekday; i += 1) {
+    cells.push({ iso: "", day: "" });
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const current = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+    cells.push({ iso: toIsoDate(current), day });
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ iso: "", day: "" });
+  }
+  return cells;
+}
+
+function buildSubmissionCountMap(rows) {
+  const countMap = new Map();
+  for (const row of rows) {
+    const key = row.study_date;
+    countMap.set(key, (countMap.get(key) || 0) + 1);
+  }
+  return countMap;
+}
+
+function normalizeCalendarMarkKind(kind) {
+  if (kind === "ring" || kind === "done" || kind === "missed") {
+    return kind;
+  }
+  return "none";
+}
+
+function nextCalendarMarkKind(currentKind) {
+  const idx = CALENDAR_MARK_ORDER.indexOf(currentKind);
+  return CALENDAR_MARK_ORDER[(idx + 1 + CALENDAR_MARK_ORDER.length) % CALENDAR_MARK_ORDER.length];
+}
+
+function messageEventTitle(eventType) {
+  if (eventType === "submission") {
+    return "有新的作业提交";
+  }
+  if (eventType === "review") {
+    return "老师已批改作业";
+  }
+  return "消息提醒";
+}
+
+function messagePageLabel(page) {
+  if (page === "teacher-review" || page === "teammate-review") {
+    return "去批改页";
+  }
+  if (page === "student-history" || page === "teammate-history") {
+    return "去提交记录";
+  }
+  return "打开";
+}
+
+function isMessageSchemaError(error) {
+  const msg = toErrorMessage(error);
+  return (
+    msg.includes("Could not find the table 'public.messages'") ||
+    msg.includes("recipient_id") ||
+    msg.includes("event_type") ||
+    msg.includes("read_at") ||
+    msg.includes("link_page")
+  );
+}
+
+function isCalendarSchemaError(error) {
+  const msg = toErrorMessage(error);
+  return msg.includes("calendar_marks");
+}
+
 function isPathAlreadyExistsError(error) {
   const msg = toErrorMessage(error).toLowerCase();
   return msg.includes("already exists") || msg.includes("duplicate key");
@@ -5313,16 +6571,24 @@ function showAlert(message, type = "info", duration = 4600, popup = false) {
     msg.includes("Could not find the table 'public.daily_reflections'") ||
     msg.includes("Could not find the table 'public.reflection_comments'") ||
     msg.includes("Could not find the table 'public.image_annotations'") ||
+    msg.includes("Could not find the table 'public.calendar_marks'") ||
     msg.includes("Could not find the table 'public.translation_prompts'") ||
     msg.includes("Could not find the table 'public.translation_attempts'") ||
     msg.includes("Could not find the table 'public.translation_reviews'")
   ) {
-    msg = "数据库缺少新表（daily_reflections / reflection_comments / image_annotations / translation_prompts / translation_attempts / translation_reviews）。请去 Supabase SQL Editor 重新执行最新 schema.sql。";
+    msg = "数据库缺少新表（daily_reflections / reflection_comments / image_annotations / calendar_marks / translation_prompts / translation_attempts / translation_reviews）。请去 Supabase SQL Editor 重新执行最新 schema.sql。";
   } else if (
     msg.includes("function public.set_profile_label") ||
     msg.includes("set_profile_label(")
   ) {
     msg = "数据库缺少 set_profile_label 函数。请去 Supabase SQL Editor 重新执行最新 schema.sql。";
+  } else if (
+    msg.includes("recipient_id") ||
+    msg.includes("event_type") ||
+    msg.includes("read_at") ||
+    msg.includes("link_page")
+  ) {
+    msg = "数据库里的 messages 表还是旧结构。请去 Supabase SQL Editor 重新执行最新 schema.sql。";
   } else if (msg.includes("Failed to fetch")) {
     msg = "网络请求失败：可能是 API 地址错误、网络不可达或被浏览器跨域策略拦截。";
   }

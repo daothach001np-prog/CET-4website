@@ -27,6 +27,12 @@ begin
 exception when duplicate_object then null;
 end $$;
 
+do $$
+begin
+  create type public.calendar_mark_kind as enum ('ring', 'done', 'missed');
+exception when duplicate_object then null;
+end $$;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null default '',
@@ -159,6 +165,36 @@ create table if not exists public.messages (
   sender_id uuid not null references public.profiles(id) on delete cascade,
   body text not null check (char_length(trim(body)) > 0 and char_length(body) <= 1000),
   created_at timestamptz not null default now()
+);
+
+alter table public.messages
+  add column if not exists recipient_id uuid references public.profiles(id) on delete cascade;
+
+alter table public.messages
+  add column if not exists event_type text not null default 'info';
+
+alter table public.messages
+  add column if not exists link_page text not null default '';
+
+alter table public.messages
+  add column if not exists related_submission_id uuid references public.submissions(id) on delete set null;
+
+alter table public.messages
+  add column if not exists related_review_id uuid references public.reviews(id) on delete set null;
+
+alter table public.messages
+  add column if not exists read_at timestamptz;
+
+create table if not exists public.calendar_marks (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.profiles(id) on delete cascade,
+  mark_date date not null,
+  kind public.calendar_mark_kind not null default 'ring',
+  note text not null default '',
+  marked_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (student_id, mark_date)
 );
 
 insert into public.translation_prompts (
@@ -391,11 +427,13 @@ create index if not exists idx_fines_student_date on public.fines (student_id, f
 create index if not exists idx_reflections_student_date on public.daily_reflections (student_id, reflection_date desc);
 create index if not exists idx_reflection_comments_reflection_id on public.reflection_comments (reflection_id);
 create index if not exists idx_image_annotations_submission_id on public.image_annotations (submission_id, created_at desc);
+create index if not exists idx_calendar_marks_student_date on public.calendar_marks (student_id, mark_date desc);
 create index if not exists idx_translation_prompts_year_code on public.translation_prompts (year desc, paper_code desc, prompt_no asc);
 create index if not exists idx_translation_attempts_student_created on public.translation_attempts (student_id, created_at desc);
 create index if not exists idx_translation_attempts_prompt on public.translation_attempts (prompt_id);
 create index if not exists idx_translation_reviews_attempt_id on public.translation_reviews (attempt_id);
 create index if not exists idx_messages_created_at on public.messages (created_at asc);
+create index if not exists idx_messages_recipient_created on public.messages (recipient_id, created_at desc);
 
 create or replace function public.touch_updated_at()
 returns trigger
@@ -425,6 +463,11 @@ for each row execute function public.touch_updated_at();
 drop trigger if exists trg_reflection_comments_touch_updated_at on public.reflection_comments;
 create trigger trg_reflection_comments_touch_updated_at
 before update on public.reflection_comments
+for each row execute function public.touch_updated_at();
+
+drop trigger if exists trg_calendar_marks_touch_updated_at on public.calendar_marks;
+create trigger trg_calendar_marks_touch_updated_at
+before update on public.calendar_marks
 for each row execute function public.touch_updated_at();
 
 drop trigger if exists trg_translation_prompts_touch_updated_at on public.translation_prompts;
@@ -696,6 +739,166 @@ begin
 end;
 $$;
 
+create or replace function public.module_label(p_module public.task_module)
+returns text
+language sql
+immutable
+as $$
+  select case p_module
+    when 'reading' then '阅读'
+    when 'translation' then '翻译'
+    when 'writing' then '写作'
+    when 'listening' then '听力'
+    when 'mock' then '模拟考'
+    else p_module::text
+  end;
+$$;
+
+create or replace function public.push_message(
+  p_recipient uuid,
+  p_body text,
+  p_sender uuid,
+  p_event_type text default 'info',
+  p_link_page text default '',
+  p_submission uuid default null,
+  p_review uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  out_id uuid;
+begin
+  if p_recipient is null or coalesce(trim(p_body), '') = '' then
+    return null;
+  end if;
+
+  insert into public.messages (
+    sender_id,
+    recipient_id,
+    body,
+    event_type,
+    link_page,
+    related_submission_id,
+    related_review_id
+  )
+  values (
+    p_sender,
+    p_recipient,
+    left(trim(p_body), 1000),
+    coalesce(nullif(trim(p_event_type), ''), 'info'),
+    coalesce(p_link_page, ''),
+    p_submission,
+    p_review
+  )
+  returning id into out_id;
+
+  return out_id;
+end;
+$$;
+
+create or replace function public.notify_submission_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  reviewer record;
+  sender_name text;
+  action_name text;
+  target_page text;
+begin
+  if auth.uid() is null or auth.uid() <> new.student_id then
+    return new;
+  end if;
+
+  select coalesce(nullif(full_name, ''), login_email, '学生')
+  into sender_name
+  from public.profiles
+  where id = new.student_id;
+
+  action_name := case when tg_op = 'INSERT' then '提交了' else '更新了' end;
+
+  for reviewer in
+    select id, role, is_admin
+    from public.profiles
+    where id <> new.student_id
+      and (role::text in ('teacher', 'teammate') or is_admin = true)
+  loop
+    target_page := case
+      when reviewer.role = 'teammate' then 'teammate-review'
+      else 'teacher-review'
+    end;
+
+    perform public.push_message(
+      reviewer.id,
+      sender_name || action_name || new.study_date || ' 的' || public.module_label(new.module) || '作业。',
+      new.student_id,
+      'submission',
+      target_page,
+      new.id,
+      null
+    );
+  end loop;
+
+  return new;
+end;
+$$;
+
+create or replace function public.notify_review_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  submission_row public.submissions;
+  teacher_name text;
+  action_name text;
+  target_page text;
+begin
+  select *
+  into submission_row
+  from public.submissions
+  where id = new.submission_id;
+
+  if submission_row.id is null then
+    return new;
+  end if;
+
+  select coalesce(nullif(full_name, ''), login_email, '老师')
+  into teacher_name
+  from public.profiles
+  where id = new.teacher_id;
+
+  action_name := case when tg_op = 'INSERT' then '已批改' else '更新了批改' end;
+  target_page := case
+    when exists (
+      select 1
+      from public.profiles p
+      where p.id = submission_row.student_id
+        and p.role = 'teammate'
+    ) then 'teammate-history'
+    else 'student-history'
+  end;
+
+  perform public.push_message(
+    submission_row.student_id,
+    teacher_name || action_name || submission_row.study_date || ' 的' || public.module_label(submission_row.module) || '作业。',
+    new.teacher_id,
+    'review',
+    target_page,
+    submission_row.id,
+    new.id
+  );
+
+  return new;
+end;
+$$;
+
 create or replace function public.required_modules_for_day(p_day date)
 returns public.task_module[]
 language plpgsql
@@ -803,6 +1006,18 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_submissions_notify_message on public.submissions;
+create trigger trg_submissions_notify_message
+after insert or update of content, word_summary, mistake_summary, image_urls
+on public.submissions
+for each row execute function public.notify_submission_message();
+
+drop trigger if exists trg_reviews_notify_message on public.reviews;
+create trigger trg_reviews_notify_message
+after insert or update of score, status, comment
+on public.reviews
+for each row execute function public.notify_review_message();
+
 alter table public.profiles enable row level security;
 alter table public.submissions enable row level security;
 alter table public.reviews enable row level security;
@@ -810,6 +1025,7 @@ alter table public.fines enable row level security;
 alter table public.daily_reflections enable row level security;
 alter table public.reflection_comments enable row level security;
 alter table public.image_annotations enable row level security;
+alter table public.calendar_marks enable row level security;
 alter table public.translation_prompts enable row level security;
 alter table public.translation_attempts enable row level security;
 alter table public.translation_reviews enable row level security;
@@ -992,6 +1208,35 @@ for delete
 to authenticated
 using (public.is_reviewer(auth.uid()));
 
+drop policy if exists calendar_marks_select on public.calendar_marks;
+create policy calendar_marks_select
+on public.calendar_marks
+for select
+to authenticated
+using (student_id = auth.uid() or public.is_reviewer(auth.uid()));
+
+drop policy if exists calendar_marks_insert_reviewer on public.calendar_marks;
+create policy calendar_marks_insert_reviewer
+on public.calendar_marks
+for insert
+to authenticated
+with check (public.is_reviewer(auth.uid()) and marked_by = auth.uid());
+
+drop policy if exists calendar_marks_update_reviewer on public.calendar_marks;
+create policy calendar_marks_update_reviewer
+on public.calendar_marks
+for update
+to authenticated
+using (public.is_reviewer(auth.uid()))
+with check (public.is_reviewer(auth.uid()) and marked_by = auth.uid());
+
+drop policy if exists calendar_marks_delete_reviewer on public.calendar_marks;
+create policy calendar_marks_delete_reviewer
+on public.calendar_marks
+for delete
+to authenticated
+using (public.is_reviewer(auth.uid()));
+
 drop policy if exists translation_prompts_select_authenticated on public.translation_prompts;
 create policy translation_prompts_select_authenticated
 on public.translation_prompts
@@ -1088,11 +1333,12 @@ to authenticated
 using (public.is_reviewer(auth.uid()));
 
 drop policy if exists messages_select_authenticated on public.messages;
-create policy messages_select_authenticated
+drop policy if exists messages_select_recipient_or_sender on public.messages;
+create policy messages_select_recipient_or_sender
 on public.messages
 for select
 to authenticated
-using (true);
+using (recipient_id = auth.uid() or sender_id = auth.uid());
 
 drop policy if exists messages_insert_own on public.messages;
 create policy messages_insert_own
@@ -1100,6 +1346,14 @@ on public.messages
 for insert
 to authenticated
 with check (sender_id = auth.uid());
+
+drop policy if exists messages_update_recipient on public.messages;
+create policy messages_update_recipient
+on public.messages
+for update
+to authenticated
+using (recipient_id = auth.uid())
+with check (recipient_id = auth.uid());
 
 -- Storage buckets
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
