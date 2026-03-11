@@ -1,4 +1,4 @@
-﻿import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const MODULE_LABELS = {
   reading: "阅读",
@@ -88,6 +88,9 @@ let teacherTranslationReviewMap = new Map();
 let selectedTranslationAttemptId = null;
 let latestTranslationOcrText = "";
 let historyModuleFilter = "all";
+let historyDateFilter = "";
+let historyHighlightedSubmissionId = "";
+let studentSubmissionCursor = startOfWeek(new Date());
 let mySubmissionCache = [];
 let myReviewMap = new Map();
 let myAnnotationMap = new Map();
@@ -227,6 +230,10 @@ function cacheUi() {
     "submission-form",
     "study-date",
     "study-module",
+    "student-date-prev-btn",
+    "student-date-today-btn",
+    "student-date-next-btn",
+    "student-date-chip-list",
     "study-content",
     "study-paste-zone",
     "study-pick-btn",
@@ -245,6 +252,12 @@ function cacheUi() {
     "clear-submission-draft-btn",
     "history-panel",
     "history-module-tabs",
+    "history-date-filter",
+    "history-filter-today-btn",
+    "history-date-clear-btn",
+    "history-filter-state",
+    "history-sync-list",
+    "history-sync-stats",
     "history-list",
     "student-calendar-prev-btn",
     "student-calendar-today-btn",
@@ -418,8 +431,21 @@ function bindEvents() {
     }
     const module = btn.getAttribute("data-module") || "all";
     historyModuleFilter = module;
+    clearHistoryFocus();
     renderHistoryModuleTabs();
     renderHistoryList();
+  });
+  ui["history-date-filter"].addEventListener("change", () => {
+    clearHistoryFocus();
+    setHistoryDateFilter(ui["history-date-filter"].value);
+  });
+  ui["history-filter-today-btn"].addEventListener("click", () => {
+    clearHistoryFocus();
+    setHistoryDateFilter(toIsoDate(new Date()));
+  });
+  ui["history-date-clear-btn"].addEventListener("click", () => {
+    clearHistoryFocus();
+    setHistoryDateFilter("");
   });
 
   ui["ai-save-config-btn"].addEventListener("click", saveAiConfig);
@@ -506,7 +532,33 @@ function bindEvents() {
     void saveSubmission();
   });
 
+  ui["student-date-prev-btn"].addEventListener("click", () => {
+    studentSubmissionCursor = addDays(studentSubmissionCursor, -7);
+    renderStudentDatePicker();
+  });
+  ui["student-date-today-btn"].addEventListener("click", () => {
+    const today = toIsoDate(new Date());
+    studentSubmissionCursor = startOfWeek(today);
+    applyStudentStudyDate(today);
+  });
+  ui["student-date-next-btn"].addEventListener("click", () => {
+    studentSubmissionCursor = addDays(studentSubmissionCursor, 7);
+    renderStudentDatePicker();
+  });
+  ui["student-date-chip-list"].addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-study-quick-date]");
+    if (!btn) {
+      return;
+    }
+    const pickedDate = btn.dataset.studyQuickDate;
+    if (!pickedDate) {
+      return;
+    }
+    applyStudentStudyDate(pickedDate);
+  });
+
   ui["study-date"].addEventListener("change", () => {
+    syncStudentDateQuickCursor();
     scheduleSubmissionDraftSync();
     void onStudentSlotChanged();
   });
@@ -628,6 +680,18 @@ function bindEvents() {
   ui["review-comment"].addEventListener("input", scheduleReviewDraftSync);
   ui["clear-review-draft-btn"].addEventListener("click", () => void clearActiveReviewDraft());
   ui["save-review-btn"].addEventListener("click", () => void saveReview());
+  ui["student-calendar-grid"].addEventListener("click", (event) => {
+    const cell = event.target.closest("button[data-history-date]");
+    if (!cell) {
+      return;
+    }
+    const pickedDate = cell.dataset.historyDate;
+    if (!pickedDate) {
+      return;
+    }
+    clearHistoryFocus();
+    setHistoryDateFilter(historyDateFilter === pickedDate ? "" : pickedDate, { syncCalendar: false });
+  });
   ui["student-calendar-prev-btn"].addEventListener("click", () => {
     studentCalendarCursor = addMonths(studentCalendarCursor, -1);
     void loadStudentCalendarData();
@@ -756,6 +820,10 @@ function fillDefaultDates() {
   ui["reflection-date"].value = today;
   ui["reflection-filter-date"].value = today;
   ui["translation-teacher-date"].value = today;
+  historyDateFilter = "";
+  studentSubmissionCursor = startOfWeek(today);
+  renderStudentDatePicker();
+  renderHistoryFilterState();
 }
 
 function renderMotivation() {
@@ -872,6 +940,7 @@ function showPage(requestedPage) {
 
   if (page === "student-home" || page === "teammate-home") {
     ui["student-panel"].classList.remove("hidden");
+    renderStudentDatePicker();
     void loadCurrentSubmissionImages();
   } else if (page === "teacher-review" || page === "teammate-review") {
     ui["teacher-panel"].classList.remove("hidden");
@@ -933,6 +1002,9 @@ async function syncSessionUi() {
     selectedSubmissionId = null;
     selectedReflectionId = null;
     activePage = "";
+    historyDateFilter = "";
+    historyHighlightedSubmissionId = "";
+    studentSubmissionCursor = startOfWeek(new Date());
     essayChatHistory = [];
     clearEssayPendingImages();
     resetTranslationState();
@@ -1165,6 +1237,7 @@ async function restoreSubmissionDraft() {
     } else {
       clearPendingImages();
     }
+    syncStudentDateQuickCursor();
     if (!hasShownSubmissionDraftRestore && draft && (draft.content || draft.wordSummary || draft.mistakeSummary || files.length > 0)) {
       hasShownSubmissionDraftRestore = true;
       showAlert("已恢复上次未完成的作业草稿。", "info", 2800, true);
@@ -1511,6 +1584,14 @@ async function openMessage(messageId) {
     if ((row.link_page === "teacher-review" || row.link_page === "teammate-review") && row.related_submission_id) {
       await loadTeacherData(true);
       await selectSubmissionForReview(row.related_submission_id);
+      return;
+    }
+    if (row.link_page === "student-history" || row.link_page === "teammate-history") {
+      await loadStudentData();
+      await loadStudentCalendarData();
+      if (row.related_submission_id) {
+        focusHistorySubmission(row.related_submission_id);
+      }
     }
   }
 }
@@ -1635,7 +1716,10 @@ function renderStudentCalendar() {
     studentCalendarCursor,
     studentCalendarMarks,
     studentCalendarSubmissionCounts,
-    false
+    {
+      filterable: true,
+      selectedDate: historyDateFilter,
+    }
   );
 }
 
@@ -1650,11 +1734,11 @@ function renderTeacherCalendar() {
     teacherCalendarCursor,
     teacherCalendarMarks,
     teacherCalendarSubmissionCounts,
-    true
+    { editable: true }
   );
 }
 
-function renderCalendarGrid(holder, monthDate, marks, countMap, editable) {
+function renderCalendarGrid(holder, monthDate, marks, countMap, options = {}) {
   if (!holder) {
     return;
   }
@@ -1664,6 +1748,9 @@ function renderCalendarGrid(holder, monthDate, marks, countMap, editable) {
     return;
   }
 
+  const editable = Boolean(options.editable);
+  const filterable = Boolean(options.filterable);
+  const selectedDate = String(options.selectedDate || "");
   const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
   const markMap = new Map((marks ?? []).map((row) => [row.mark_date, row]));
   const cells = buildCalendarCells(monthDate);
@@ -1681,6 +1768,8 @@ function renderCalendarGrid(holder, monthDate, marks, countMap, editable) {
       const classes = [
         "calendar-cell",
         cell.iso === today ? "is-today" : "",
+        editable || filterable ? "is-clickable" : "",
+        filterable && selectedDate === cell.iso ? "is-filtered" : "",
       ].filter(Boolean).join(" ");
       const markHtml = kind === "none"
         ? "<span class=\"calendar-mark\"></span>"
@@ -1694,10 +1783,13 @@ function renderCalendarGrid(holder, monthDate, marks, countMap, editable) {
         ${markHtml}
         ${countHtml}
       `;
-      if (!editable) {
-        return `<article class="${classes}">${inner}</article>`;
+      if (editable) {
+        return `<button class="${classes}" type="button" data-calendar-date="${cell.iso}" title="点击切换老师标记">${inner}</button>`;
       }
-      return `<button class="${classes}" type="button" data-calendar-date="${cell.iso}" title="点击切换老师标记">${inner}</button>`;
+      if (filterable) {
+        return `<button class="${classes}" type="button" data-history-date="${cell.iso}" title="${selectedDate === cell.iso ? "点击取消日期筛选" : `按 ${cell.iso} 筛选提交记录`}">${inner}</button>`;
+      }
+      return `<article class="${classes}">${inner}</article>`;
     }),
   ].join("");
 }
@@ -4963,6 +5055,10 @@ async function loadStudentData() {
   mySubmissionCache = submissions;
   myReviewMap = reviewMap;
   myAnnotationMap = annotationMapBySubmission;
+  if (historyHighlightedSubmissionId && !mySubmissionCache.some((item) => item.id === historyHighlightedSubmissionId)) {
+    historyHighlightedSubmissionId = "";
+  }
+  renderStudentDatePicker();
   renderHistoryModuleTabs();
   renderHistoryList();
 }
@@ -5016,6 +5112,170 @@ async function loadAnnotationMap(submissionIds) {
 
   return map;
 }
+function clearHistoryFocus() {
+  historyHighlightedSubmissionId = "";
+}
+
+function applyStudentStudyDate(isoDate) {
+  if (!isoDate) {
+    return;
+  }
+  ui["study-date"].value = isoDate;
+  syncStudentDateQuickCursor();
+  void onStudentSlotChanged();
+}
+
+function syncStudentDateQuickCursor() {
+  const pickedDate = ui["study-date"]?.value || toIsoDate(new Date());
+  studentSubmissionCursor = startOfWeek(pickedDate);
+  renderStudentDatePicker();
+}
+
+function renderStudentDatePicker() {
+  const holder = ui["student-date-chip-list"];
+  if (!holder) {
+    return;
+  }
+
+  const selectedDate = ui["study-date"]?.value || toIsoDate(new Date());
+  const today = toIsoDate(new Date());
+  const countMap = buildSubmissionCountMap(mySubmissionCache);
+  const days = Array.from({ length: 7 }, (_item, index) => addDays(studentSubmissionCursor, index));
+
+  holder.innerHTML = days
+    .map((date) => {
+      const iso = toIsoDate(date);
+      const count = countMap.get(iso) || 0;
+      const classes = [
+        "date-chip",
+        iso === selectedDate ? "active" : "",
+        iso === today ? "is-today" : "",
+        count > 0 ? "has-record" : "",
+      ].filter(Boolean).join(" ");
+      const monthDay = `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
+      const meta = count > 0 ? `已交 ${count} 项` : "暂无记录";
+      return `<button type="button" class="${classes}" data-study-quick-date="${iso}" title="切换到 ${iso}">
+        <span class="date-chip-weekday">${formatWeekdayShort(date)}</span>
+        <span class="date-chip-day">${monthDay}</span>
+        <span class="date-chip-meta">${meta}</span>
+      </button>`;
+    })
+    .join("");
+}
+
+function getFilteredHistoryRows() {
+  let rows = mySubmissionCache.slice();
+  if (historyModuleFilter !== "all") {
+    rows = rows.filter((item) => item.module === historyModuleFilter);
+  }
+  if (historyDateFilter) {
+    rows = rows.filter((item) => item.study_date === historyDateFilter);
+  }
+  return rows;
+}
+
+function renderHistoryFilterState(rows = getFilteredHistoryRows()) {
+  const holder = ui["history-filter-state"];
+  if (!holder) {
+    return;
+  }
+
+  const dateText = historyDateFilter || "全部日期";
+  const moduleText = historyModuleFilter === "all" ? "全部模块" : (MODULE_LABELS[historyModuleFilter] ?? historyModuleFilter);
+  const focusText = historyHighlightedSubmissionId ? " · 已定位到消息对应记录" : "";
+  holder.textContent = `当前查看：${dateText} · ${moduleText} · 共 ${rows.length} 条${focusText}`;
+}
+
+function setHistoryDateFilter(nextDate, options = {}) {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(String(nextDate || "")) ? String(nextDate) : "";
+  historyDateFilter = normalized;
+  if (ui["history-date-filter"]) {
+    ui["history-date-filter"].value = normalized;
+  }
+  renderHistoryList();
+
+  if (normalized && options.syncCalendar !== false) {
+    const targetMonth = startOfMonth(normalized);
+    if (formatMonthLabel(targetMonth) !== formatMonthLabel(studentCalendarCursor)) {
+      studentCalendarCursor = targetMonth;
+      void loadStudentCalendarData();
+      return;
+    }
+  }
+
+  renderStudentCalendar();
+}
+
+function focusHistorySubmission(submissionId) {
+  historyHighlightedSubmissionId = submissionId || "";
+  const row = mySubmissionCache.find((item) => item.id === submissionId);
+  if (!row) {
+    renderHistoryList();
+    return;
+  }
+
+  historyModuleFilter = "all";
+  renderHistoryModuleTabs();
+  setHistoryDateFilter(row.study_date);
+  window.requestAnimationFrame(() => {
+    const target = document.querySelector(`[data-history-row-id="${submissionId}"]`);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
+function renderHistorySyncBoard(rows = getFilteredHistoryRows()) {
+  const holder = ui["history-sync-list"];
+  const stats = ui["history-sync-stats"];
+  if (!holder || !stats) {
+    return;
+  }
+
+  const reviewedCount = rows.filter((item) => myReviewMap.has(item.id)).length;
+  const annotatedCount = rows.filter((item) => (myAnnotationMap.get(item.id) ?? []).length > 0).length;
+  stats.innerHTML = [
+    `<span class="history-sync-stat">共 ${rows.length} 条</span>`,
+    `<span class="history-sync-stat">已处理 ${reviewedCount}</span>`,
+    `<span class="history-sync-stat">待处理 ${Math.max(0, rows.length - reviewedCount)}</span>`,
+    `<span class="history-sync-stat">有批注 ${annotatedCount}</span>`,
+  ].join("");
+
+  if (!rows.length) {
+    holder.innerHTML = "<p class=\"muted\">当前筛选下暂无同步记录。</p>";
+    return;
+  }
+
+  holder.innerHTML = rows
+    .slice()
+    .sort((a, b) => {
+      const leftReview = myReviewMap.get(a.id);
+      const rightReview = myReviewMap.get(b.id);
+      const leftKey = String(leftReview?.updated_at || leftReview?.created_at || a.created_at || "");
+      const rightKey = String(rightReview?.updated_at || rightReview?.created_at || b.created_at || "");
+      return rightKey.localeCompare(leftKey);
+    })
+    .map((row) => {
+      const review = myReviewMap.get(row.id);
+      const ann = myAnnotationMap.get(row.id) ?? [];
+      const status = review?.status ?? row.review_status ?? "pending";
+      const scoreText = review?.score == null ? "-" : String(review.score);
+      const syncedAt = review ? formatDateTime(review.updated_at || review.created_at) : "老师尚未处理";
+      const comment = review?.comment || "老师暂未写评语。";
+      return `
+        <article class="sync-card">
+          <div class="sync-card-head">
+            <div>
+              <strong class="sync-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</strong>
+              <p class="sync-card-meta">老师处理时间：${escapeHtml(syncedAt)}</p>
+            </div>
+            <span class="status-chip ${statusClass(status)}">${STATUS_LABELS[status] ?? status}</span>
+          </div>
+          <p class="sync-card-meta">分数：${escapeHtml(scoreText)} · 图片 ${escapeHtml(String((row.image_urls ?? []).length))} 张 · 批注 ${escapeHtml(String(ann.length))} 张</p>
+          <p class="sync-card-comment">${escapeHtml(comment)}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
 
 function renderHistoryModuleTabs() {
   const wrap = ui["history-module-tabs"];
@@ -5035,10 +5295,9 @@ function renderHistoryList() {
   }
   holder.innerHTML = "";
 
-  let rows = mySubmissionCache;
-  if (historyModuleFilter !== "all") {
-    rows = rows.filter((x) => x.module === historyModuleFilter);
-  }
+  const rows = getFilteredHistoryRows();
+  renderHistoryFilterState(rows);
+  renderHistorySyncBoard(rows);
 
   if (!rows.length) {
     holder.innerHTML = "<p class=\"muted\">当前筛选下暂无提交记录。</p>";
@@ -5062,6 +5321,10 @@ function renderHistoryList() {
 
       const card = document.createElement("article");
       card.className = "history-card";
+      if (row.id === historyHighlightedSubmissionId) {
+        card.classList.add("active");
+      }
+      card.dataset.historyRowId = row.id;
       card.innerHTML = `
         <div class="history-head">
           <strong>${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}</strong>
@@ -6314,14 +6577,42 @@ async function clearSubmissionDraftAssets() {
   await draftDbDelete(key);
 }
 
+function toDateObject(value) {
+  if (value instanceof Date) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map((item) => Number(item));
+    return new Date(year, month - 1, day);
+  }
+  const raw = new Date(value || Date.now());
+  return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
+}
+
+function startOfWeek(date) {
+  const raw = toDateObject(date);
+  const weekday = (raw.getDay() + 6) % 7;
+  return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate() - weekday);
+}
+
+function addDays(date, diff) {
+  const raw = toDateObject(date);
+  return new Date(raw.getFullYear(), raw.getMonth(), raw.getDate() + diff);
+}
+
 function startOfMonth(date) {
-  const raw = date instanceof Date ? date : new Date(date);
+  const raw = toDateObject(date);
   return new Date(raw.getFullYear(), raw.getMonth(), 1);
 }
 
 function addMonths(date, diff) {
   const raw = startOfMonth(date);
   return new Date(raw.getFullYear(), raw.getMonth() + diff, 1);
+}
+
+function formatWeekdayShort(date) {
+  const labels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  return labels[toDateObject(date).getDay()];
 }
 
 function getMonthRange(date) {

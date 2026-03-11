@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -176,6 +176,20 @@
               </select>
             </div>
           </div>
+          <div class="field-row">
+            <label>日期快选</label>
+            <div class="date-quick-panel">
+              <div class="calendar-toolbar compact">
+                <div class="inline-actions">
+                  <button id="student-date-prev-btn" class="btn btn-ghost btn-small" type="button" title="查看上一周">上一周</button>
+                  <button id="student-date-today-btn" class="btn btn-ghost btn-small" type="button" title="回到今天所在周">今天</button>
+                  <button id="student-date-next-btn" class="btn btn-ghost btn-small" type="button" title="查看下一周">下一周</button>
+                </div>
+                <strong>快速选日期</strong>
+              </div>
+              <div id="student-date-chip-list" class="date-chip-list"></div>
+            </div>
+          </div>
 
           <div class="field-row">
             <label for="study-content">核心内容</label>
@@ -232,14 +246,37 @@
 
       <section id="history-panel" class="panel hidden">
         <h2>提交记录查询</h2>
-        <p class="muted">按模块分类查看历史提交，无需折叠翻找。</p>
-        <div id="history-module-tabs" class="module-tabs">
-          <button type="button" class="module-tab active" data-module="all">全部</button>
-          <button type="button" class="module-tab" data-module="reading">阅读</button>
-          <button type="button" class="module-tab" data-module="translation">翻译</button>
-          <button type="button" class="module-tab" data-module="writing">写作</button>
-          <button type="button" class="module-tab" data-module="listening">听力</button>
-          <button type="button" class="module-tab" data-module="mock">模拟考</button>
+        <p class="muted">按模块和日期筛选历史提交；点下面日历某一天，也会直接同步过滤。</p>
+        <div class="history-toolbar">
+          <div id="history-module-tabs" class="module-tabs">
+            <button type="button" class="module-tab active" data-module="all">全部</button>
+            <button type="button" class="module-tab" data-module="reading">阅读</button>
+            <button type="button" class="module-tab" data-module="translation">翻译</button>
+            <button type="button" class="module-tab" data-module="writing">写作</button>
+            <button type="button" class="module-tab" data-module="listening">听力</button>
+            <button type="button" class="module-tab" data-module="mock">模拟考</button>
+          </div>
+          <div class="history-filter-bar">
+            <div class="field-row">
+              <label for="history-date-filter">按日期筛选</label>
+              <input id="history-date-filter" type="date" />
+            </div>
+            <div class="inline-actions">
+              <button id="history-filter-today-btn" class="btn btn-ghost btn-small" type="button" title="切到今天">今天</button>
+              <button id="history-date-clear-btn" class="btn btn-ghost btn-small" type="button" title="清除日期筛选">清空日期</button>
+            </div>
+          </div>
+        </div>
+        <p id="history-filter-state" class="muted">当前查看：全部日期</p>
+        <div class="panel-soft history-sync-board">
+          <div class="history-sync-head">
+            <div>
+              <h3>老师处理同步表</h3>
+              <p class="muted">老师保存状态、分数、评语或图片批注后，这里会同步显示。</p>
+            </div>
+            <div id="history-sync-stats" class="history-sync-stats"></div>
+          </div>
+          <div id="history-sync-list" class="history-sync-list"></div>
         </div>
         <div id="history-list" class="history-list"></div>
 
@@ -258,6 +295,7 @@
             <span class="calendar-legend-item"><i class="calendar-dot done"></i>已完成</span>
             <span class="calendar-legend-item"><i class="calendar-dot missed"></i>待补交</span>
             <span class="calendar-legend-item"><i class="calendar-dot count"></i>右下角数字=当天提交模块数</span>
+            <span class="calendar-legend-item"><i class="calendar-dot active"></i>点击日期=筛选当天记录</span>
           </div>
           <div id="student-calendar-grid" class="calendar-grid"></div>
           <p class="muted">这个月的老师标记和当天提交模块数都会显示在这里，方便直接看学习节奏。</p>
