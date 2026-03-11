@@ -116,7 +116,10 @@ let hasShownSubmissionDraftRestore = false;
 const previewState = {
   open: false,
   submissionId: null,
-  sourceUrl: \
+  sourceUrl: "",
+  title: "作业图片预览",
+  tip: "旋转、翻转和缩放只影响当前预览，不会改动原图。",
+  allowAnnotate: false,
   rotation: 0,
   scale: 1,
   flipX: 1,
