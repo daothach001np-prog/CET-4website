@@ -94,6 +94,7 @@ let studentSubmissionCursor = startOfWeek(new Date());
 let mySubmissionCache = [];
 let myReviewMap = new Map();
 let myAnnotationMap = new Map();
+let selectedStudentReviewId = null;
 let submissionDraftTimer = 0;
 let reviewDraftTimer = 0;
 let suppressSubmissionDraftSync = false;
@@ -115,7 +116,7 @@ let hasShownSubmissionDraftRestore = false;
 const previewState = {
   open: false,
   submissionId: null,
-  sourceUrl: "",
+  sourceUrl: \
   rotation: 0,
   scale: 1,
   flipX: 1,
@@ -360,7 +361,7 @@ function cacheUi() {
     "translation-review-target",
     "translation-review-score",
     "translation-review-comment",
-    "translation-save-review-btn",
+    \
     "image-preview-modal",
     "image-preview-title",
     "image-preview-tip",
@@ -680,6 +681,10 @@ function bindEvents() {
   ui["review-comment"].addEventListener("input", scheduleReviewDraftSync);
   ui["clear-review-draft-btn"].addEventListener("click", () => void clearActiveReviewDraft());
   ui["save-review-btn"].addEventListener("click", () => void saveReview());
+  ui["history-list"].addEventListener("click", handleStudentReviewActionClick);
+  ui["history-sync-list"].addEventListener("click", handleStudentReviewActionClick);
+  ui["student-review-body"].addEventListener("click", handleStudentReviewActionClick);
+  ui["student-review-close-btn"].addEventListener("click", closeStudentReviewModal);
   ui["student-calendar-grid"].addEventListener("click", (event) => {
     const cell = event.target.closest("button[data-history-date]");
     if (!cell) {
@@ -753,6 +758,11 @@ function bindEvents() {
   ui["annot-undo-btn"].addEventListener("click", () => void undoAnnotation());
   ui["annot-clear-btn"].addEventListener("click", () => void clearAnnotation());
   ui["annot-save-btn"].addEventListener("click", () => void saveAnnotationImage());
+  ui["student-review-modal"].addEventListener("click", (event) => {
+    if (event.target === ui["student-review-modal"]) {
+      closeStudentReviewModal();
+    }
+  });
   ui["image-preview-close-btn"].addEventListener("click", closeImagePreview);
   ui["image-preview-zoom-out-btn"].addEventListener("click", () => adjustPreviewZoom(-0.15));
   ui["image-preview-zoom-in-btn"].addEventListener("click", () => adjustPreviewZoom(0.15));
@@ -785,6 +795,10 @@ function bindEvents() {
     hideMessagePanel();
     if (previewState.open) {
       closeImagePreview();
+      return;
+    }
+    if (!ui["student-review-modal"].classList.contains("hidden")) {
+      closeStudentReviewModal();
       return;
     }
     if (annotState.open) {
@@ -1013,6 +1027,7 @@ async function syncSessionUi() {
     renderEssayChatLog();
     resetStudentImageState();
     closeImagePreview();
+    closeStudentReviewModal();
     closeAnnotationModal();
     setSessionBadge(false);
     ui["auth-panel"].classList.remove("hidden");
@@ -1851,19 +1866,30 @@ async function cycleTeacherCalendarMark(markDate) {
   renderTeacherCalendar();
 }
 
-function openImagePreview(submissionId, sourceUrl) {
-  const row = submissionCache.find((item) => item.id === submissionId);
+function openImagePreview(submissionId, sourceUrl, options = {}) {
+  const row = findSubmissionRecord(submissionId);
+  const defaultTitle = row
+    ? `作业图片预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
+    : "作业图片预览";
+  const allowAnnotate = options.allowAnnotate ?? isReviewerProfile();
+  const title = options.title || defaultTitle;
+  const tip = options.tip || "旋转、翻转和缩放只影响当前预览，不会改动原图。";
+
   previewState.open = true;
   previewState.submissionId = submissionId;
   previewState.sourceUrl = sourceUrl;
+  previewState.title = title;
+  previewState.tip = tip;
+  previewState.allowAnnotate = allowAnnotate;
   previewState.rotation = 0;
   previewState.scale = 1;
   previewState.flipX = 1;
   previewState.flipY = 1;
+
   ui["image-preview-img"].src = sourceUrl;
-  ui["image-preview-title"].textContent = row
-    ? `作业图片预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
-    : "作业图片预览";
+  ui["image-preview-title"].textContent = title;
+  ui["image-preview-tip"].textContent = tip;
+  ui["image-preview-open-annot-btn"].classList.toggle("hidden", !allowAnnotate);
   ui["image-preview-modal"].classList.remove("hidden");
   applyImagePreviewTransform();
 }
@@ -1872,9 +1898,14 @@ function closeImagePreview() {
   previewState.open = false;
   previewState.submissionId = null;
   previewState.sourceUrl = "";
+  previewState.title = "作业图片预览";
+  previewState.tip = "旋转、翻转和缩放只影响当前预览，不会改动原图。";
+  previewState.allowAnnotate = false;
   resetImagePreviewTransform(false);
   ui["image-preview-img"].removeAttribute("src");
   ui["image-preview-title"].textContent = "作业图片预览";
+  ui["image-preview-tip"].textContent = "旋转、翻转和缩放只影响当前预览，不会改动原图。";
+  ui["image-preview-open-annot-btn"].classList.toggle("hidden", !isReviewerProfile());
   ui["image-preview-modal"].classList.add("hidden");
 }
 
@@ -1917,7 +1948,7 @@ function resetImagePreviewTransform(updateUi = true) {
 }
 
 function openCurrentPreviewInAnnotator() {
-  if (!previewState.open || !previewState.submissionId || !previewState.sourceUrl) {
+  if (!previewState.open || !previewState.submissionId || !previewState.sourceUrl || !previewState.allowAnnotate || !isReviewerProfile()) {
     return;
   }
   const submissionId = previewState.submissionId;
@@ -5061,6 +5092,13 @@ async function loadStudentData() {
   renderStudentDatePicker();
   renderHistoryModuleTabs();
   renderHistoryList();
+  if (selectedStudentReviewId) {
+    if (findSubmissionRecord(selectedStudentReviewId)) {
+      renderStudentReviewModal(selectedStudentReviewId);
+    } else {
+      closeStudentReviewModal();
+    }
+  }
 }
 
 async function loadReviewMap(submissionIds) {
@@ -5223,6 +5261,380 @@ function focusHistorySubmission(submissionId) {
   });
 }
 
+function findSubmissionRecord(submissionId) {
+  return mySubmissionCache.find((item) => item.id === submissionId)
+    || submissionCache.find((item) => item.id === submissionId)
+    || null;
+}
+
+function summarizeText(text, limit = 88) {
+  const raw = String(text || "").trim().replace(/\s+/g, " ");
+  if (!raw) {
+    return "";
+  }
+  return raw.length > limit ? `${raw.slice(0, limit).trimEnd()}…` : raw;
+}
+
+function buildReviewActionButton(action, label, submissionId, extraAttrs = {}, className = "btn btn-ghost btn-small") {
+  const attrs = Object.entries(extraAttrs)
+    .filter(([, value]) => value != null && value !== "")
+    .map(([key, value]) => `${key}="${escapeAttr(String(value))}"`)
+    .join(" ");
+  const attrText = attrs ? ` ${attrs}` : "";
+  return `<button type="button" class="${escapeAttr(className)}" data-review-action="${escapeAttr(action)}" data-submission-id="${escapeAttr(submissionId)}"${attrText}>${escapeHtml(label)}</button>`;
+}
+
+function buildStudentSummaryGrid(row) {
+  const items = [];
+  if (row.word_summary) {
+    items.push({ label: "词句总结", value: row.word_summary });
+  }
+  if (row.mistake_summary) {
+    items.push({ label: "错因提醒", value: row.mistake_summary });
+  }
+  if (!items.length) {
+    return "";
+  }
+
+  return `<div class="review-summary-grid">${items
+    .map(
+      (item) => `<div class="review-summary-item">
+        <span class="review-summary-label">${escapeHtml(item.label)}</span>
+        <strong class="review-summary-value">${escapeHtml(item.value)}</strong>
+      </div>`
+    )
+    .join("")}</div>`;
+}
+
+function buildStudentHistoryCard(row, options = {}) {
+  const review = myReviewMap.get(row.id);
+  const annotations = myAnnotationMap.get(row.id) ?? [];
+  const status = review?.status ?? row.review_status ?? "pending";
+  const hasReview = Boolean(review) || annotations.length > 0;
+  const scoreText = review?.score == null ? "待评分" : `${review.score} 分`;
+  const createdAt = formatDateTime(row.created_at);
+  const reviewedAt = review ? formatDateTime(review.updated_at || review.created_at) : "等待老师处理";
+  const comment = review?.comment || (hasReview ? "老师已处理，暂未填写详细评语。" : "老师处理后，这里会展示分数、评语和图片批注。");
+  const submissionExcerpt = summarizeText(row.content, hasReview ? 78 : 96) || "这次主要通过图片提交。";
+  const summaryGrid = buildStudentSummaryGrid(row);
+  const firstImage = row.image_urls?.[0];
+  const firstAnnot = annotations[0]?.annotated_image_url;
+  const previewBase = `${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`;
+  const actions = [
+    buildReviewActionButton("open-detail", hasReview ? "查看批改详情" : "查看作业详情", row.id, {}, hasReview ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"),
+    firstAnnot
+      ? buildReviewActionButton(
+          "preview-annot",
+          "查看批注大图",
+          row.id,
+          {
+            "data-source-url": encodeURIComponent(firstAnnot),
+            "data-preview-title": `老师批注图 · ${previewBase}`,
+            "data-preview-tip": "这是老师圈画后的批注图，可放大查看细节。",
+          }
+        )
+      : "",
+    firstImage
+      ? buildReviewActionButton(
+          "preview-origin",
+          "查看原图",
+          row.id,
+          {
+            "data-source-url": encodeURIComponent(firstImage),
+            "data-preview-title": `作业原图 · ${previewBase}`,
+            "data-preview-tip": "这是你提交给老师的原始作业图片。",
+          }
+        )
+      : "",
+  ].filter(Boolean).join("");
+
+  return `
+    <article class="history-card ${hasReview ? "reviewed" : "pending"}${options.active ? " active" : ""}" data-history-row-id="${escapeAttr(row.id)}">
+      <div class="history-card-head">
+        <div>
+          <p class="history-card-kicker">${hasReview ? "老师已批改" : "等待老师处理"}</p>
+          <h3 class="history-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</h3>
+          <p class="history-card-submeta">提交 ${escapeHtml(createdAt)} · ${hasReview ? `老师处理 ${escapeHtml(reviewedAt)}` : "老师尚未处理"}</p>
+        </div>
+        <span class="status-chip ${statusClass(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>
+      </div>
+      <div class="history-card-stats">
+        <span class="history-stat-pill">分数 ${escapeHtml(scoreText)}</span>
+        <span class="history-stat-pill">原图 ${(row.image_urls ?? []).length}</span>
+        <span class="history-stat-pill">批注 ${annotations.length}</span>
+      </div>
+      <div>
+        <p class="history-card-section-label">老师评语</p>
+        <blockquote class="history-card-quote">${escapeHtml(comment)}</blockquote>
+      </div>
+      ${summaryGrid || ""}
+      <p class="history-card-submission">提交内容摘要：${escapeHtml(submissionExcerpt)}</p>
+      <div class="history-card-actions">${actions}</div>
+    </article>
+  `;
+}
+
+function buildStudentSyncCard(row) {
+  const review = myReviewMap.get(row.id);
+  const annotations = myAnnotationMap.get(row.id) ?? [];
+  const status = review?.status ?? row.review_status ?? "pending";
+  const hasReview = Boolean(review) || annotations.length > 0;
+  const comment = review?.comment || (hasReview ? "老师已处理，暂未填写详细评语。" : "老师尚未处理。处理后会同步到这里。");
+  const scoreText = review?.score == null ? "待评分" : `${review.score} 分`;
+  const syncTime = review ? formatDateTime(review.updated_at || review.created_at) : "待老师处理";
+  const firstImage = row.image_urls?.[0];
+  const firstAnnot = annotations[0]?.annotated_image_url;
+  const previewBase = `${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`;
+  const actions = [
+    buildReviewActionButton("open-detail", hasReview ? "查看批改详情" : "查看作业详情", row.id, {}, hasReview ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"),
+    firstAnnot
+      ? buildReviewActionButton(
+          "preview-annot",
+          "批注大图",
+          row.id,
+          {
+            "data-source-url": encodeURIComponent(firstAnnot),
+            "data-preview-title": `老师批注图 · ${previewBase}`,
+            "data-preview-tip": "这是老师圈画后的批注图，可放大查看细节。",
+          }
+        )
+      : "",
+    firstImage
+      ? buildReviewActionButton(
+          "preview-origin",
+          "原图",
+          row.id,
+          {
+            "data-source-url": encodeURIComponent(firstImage),
+            "data-preview-title": `作业原图 · ${previewBase}`,
+            "data-preview-tip": "这是你提交给老师的原始作业图片。",
+          }
+        )
+      : "",
+  ].filter(Boolean).join("");
+
+  return `
+    <article class="sync-card ${hasReview ? "reviewed" : "pending"}">
+      <div class="sync-card-head">
+        <div>
+          <strong class="sync-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</strong>
+          <p class="sync-card-meta">老师处理时间：${escapeHtml(syncTime)}</p>
+        </div>
+        <span class="status-chip ${statusClass(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>
+      </div>
+      <div class="sync-card-pills">
+        <span class="history-stat-pill">分数 ${escapeHtml(scoreText)}</span>
+        <span class="history-stat-pill">原图 ${(row.image_urls ?? []).length}</span>
+        <span class="history-stat-pill">批注 ${annotations.length}</span>
+      </div>
+      <p class="sync-card-comment">${escapeHtml(summarizeText(comment, 88) || "老师处理后会在这里显示评语。")}</p>
+      <div class="sync-card-actions">${actions}</div>
+    </article>
+  `;
+}
+
+function renderStudentReviewGallery(items, type, row) {
+  if (!items.length) {
+    return `<div class="student-review-empty">${type === "annotation" ? "老师暂时还没有上传批注图。批改后，这里会显示可放大查看的批注图片。" : "这次提交没有图片，老师主要基于文字内容进行了批改。"}</div>`;
+  }
+
+  const previewBase = `${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`;
+  return `<div class="student-review-gallery-list">${items
+    .map((item, index) => {
+      const imageUrl = type === "annotation" ? item.annotated_image_url : item;
+      if (!imageUrl) {
+        return "";
+      }
+      const label = type === "annotation" ? `老师批注 ${index + 1}` : `原始作业 ${index + 1}`;
+      const note = type === "annotation" && item.note
+        ? `<p class="student-review-shot-note">${escapeHtml(item.note)}</p>`
+        : '<p class="student-review-shot-note">点击可查看更清晰的大图预览。</p>';
+      const previewTitle = type === "annotation"
+        ? `老师批注图 · ${previewBase} · 第 ${index + 1} 张`
+        : `作业原图 · ${previewBase} · 第 ${index + 1} 张`;
+      const previewTip = type === "annotation"
+        ? "这是老师圈画后的批注图，可放大查看细节。"
+        : "这是你提交给老师的原始作业图片。";
+      return `<article class="student-review-shot">
+        <img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(label)}" />
+        <div class="student-review-shot-meta">
+          <strong>${escapeHtml(label)}</strong>
+          <span>${type === "annotation" ? "批注图" : "原图"}</span>
+        </div>
+        ${note}
+        ${buildReviewActionButton(
+          type === "annotation" ? "preview-annot" : "preview-origin",
+          "查看大图",
+          row.id,
+          {
+            "data-source-url": encodeURIComponent(imageUrl),
+            "data-preview-title": previewTitle,
+            "data-preview-tip": previewTip,
+          }
+        )}
+      </article>`;
+    })
+    .join("")}</div>`;
+}
+
+function renderStudentReviewModalContent(row) {
+  const review = myReviewMap.get(row.id);
+  const annotations = myAnnotationMap.get(row.id) ?? [];
+  const status = review?.status ?? row.review_status ?? "pending";
+  const hasReview = Boolean(review) || annotations.length > 0;
+  const comment = review?.comment || (hasReview ? "老师已处理，暂未填写详细评语。" : "老师还没开始处理这条作业，后续这里会显示评语、分数和批注图。");
+  const scoreText = review?.score == null ? "待评分" : `${review.score} 分`;
+  const submittedAt = formatDateTime(row.created_at);
+  const reviewedAt = review ? formatDateTime(review.updated_at || review.created_at) : "待老师处理";
+  const summaryGrid = buildStudentSummaryGrid(row);
+
+  return `
+    <div class="student-review-hero">
+      <section class="student-review-panel student-review-panel-accent">
+        <div class="student-review-section-head">
+          <div>
+            <p class="student-review-section-kicker">老师反馈</p>
+            <h4>评语与建议</h4>
+          </div>
+          <span class="status-chip ${statusClass(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>
+        </div>
+        <p class="student-review-comment">${escapeHtml(comment)}</p>
+        ${summaryGrid || '<div class="student-review-empty">这次老师还没有填写词句总结或错因提醒。</div>'}
+      </section>
+      <section class="student-review-panel">
+        <div class="student-review-section-head">
+          <div>
+            <p class="student-review-section-kicker">作业概览</p>
+            <h4>批改信息</h4>
+          </div>
+        </div>
+        <div class="student-review-scoreboard">
+          <div class="student-review-stat">
+            <span>处理状态</span>
+            <strong>${escapeHtml(STATUS_LABELS[status] ?? status)}</strong>
+          </div>
+          <div class="student-review-stat">
+            <span>老师评分</span>
+            <strong>${escapeHtml(scoreText)}</strong>
+          </div>
+          <div class="student-review-stat">
+            <span>提交时间</span>
+            <strong>${escapeHtml(submittedAt)}</strong>
+          </div>
+          <div class="student-review-stat">
+            <span>老师处理</span>
+            <strong>${escapeHtml(reviewedAt)}</strong>
+          </div>
+          <div class="student-review-stat">
+            <span>原始图片</span>
+            <strong>${escapeHtml(String((row.image_urls ?? []).length))} 张</strong>
+          </div>
+          <div class="student-review-stat">
+            <span>批注图片</span>
+            <strong>${escapeHtml(String(annotations.length))} 张</strong>
+          </div>
+        </div>
+      </section>
+    </div>
+    <section class="student-review-panel">
+      <div class="student-review-section-head">
+        <div>
+          <p class="student-review-section-kicker">你的提交</p>
+          <h4>作业正文</h4>
+        </div>
+      </div>
+      <p class="student-review-content">${escapeHtml(row.content || "这次没有填写文字内容，老师主要依据图片进行了批改。")}</p>
+    </section>
+    <section class="student-review-panel">
+      <div class="student-review-section-head">
+        <div>
+          <p class="student-review-section-kicker">原始材料</p>
+          <h4>你提交给老师的图片</h4>
+        </div>
+      </div>
+      ${renderStudentReviewGallery(row.image_urls ?? [], "original", row)}
+    </section>
+    <section class="student-review-panel">
+      <div class="student-review-section-head">
+        <div>
+          <p class="student-review-section-kicker">老师批注</p>
+          <h4>可放大查看的批注图</h4>
+        </div>
+      </div>
+      ${renderStudentReviewGallery(annotations, "annotation", row)}
+    </section>
+  `;
+}
+
+function renderStudentReviewModal(submissionId) {
+  const row = findSubmissionRecord(submissionId);
+  if (!row) {
+    closeStudentReviewModal();
+    return;
+  }
+  const review = myReviewMap.get(submissionId);
+  const annotations = myAnnotationMap.get(submissionId) ?? [];
+  const hasReview = Boolean(review) || annotations.length > 0;
+  ui["student-review-kicker"].textContent = hasReview ? "老师批改详情" : "作业详情";
+  ui["student-review-title"].textContent = `${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`;
+  ui["student-review-subtitle"].textContent = hasReview
+    ? `提交时间：${formatDateTime(row.created_at)} · 老师处理：${formatDateTime(review?.updated_at || review?.created_at)}`
+    : `提交时间：${formatDateTime(row.created_at)} · 老师尚未处理`;
+  ui["student-review-body"].innerHTML = renderStudentReviewModalContent(row);
+}
+
+function openStudentReviewModal(submissionId) {
+  if (!findSubmissionRecord(submissionId)) {
+    return;
+  }
+  selectedStudentReviewId = submissionId;
+  if (historyHighlightedSubmissionId !== submissionId) {
+    historyHighlightedSubmissionId = submissionId;
+    renderHistoryList();
+  }
+  renderStudentReviewModal(submissionId);
+  ui["student-review-modal"].classList.remove("hidden");
+}
+
+function closeStudentReviewModal() {
+  selectedStudentReviewId = null;
+  if (!ui["student-review-modal"]) {
+    return;
+  }
+  ui["student-review-kicker"].textContent = "老师批改详情";
+  ui["student-review-title"].textContent = "-";
+  ui["student-review-subtitle"].textContent = "-";
+  ui["student-review-body"].innerHTML = "";
+  ui["student-review-modal"].classList.add("hidden");
+}
+
+function handleStudentReviewActionClick(event) {
+  const actionBtn = event.target.closest("[data-review-action]");
+  if (!actionBtn) {
+    return;
+  }
+  event.preventDefault();
+  const submissionId = actionBtn.dataset.submissionId;
+  if (!submissionId) {
+    return;
+  }
+
+  if (actionBtn.dataset.reviewAction === "open-detail") {
+    openStudentReviewModal(submissionId);
+    return;
+  }
+
+  const sourceUrl = actionBtn.dataset.sourceUrl;
+  if (!sourceUrl) {
+    return;
+  }
+  openImagePreview(submissionId, decodeURIComponent(sourceUrl), {
+    allowAnnotate: false,
+    title: actionBtn.dataset.previewTitle || "作业图片预览",
+    tip: actionBtn.dataset.previewTip || "旋转、翻转和缩放只影响当前预览，不会改动原图。",
+  });
+}
+
 function renderHistorySyncBoard(rows = getFilteredHistoryRows()) {
   const holder = ui["history-sync-list"];
   const stats = ui["history-sync-stats"];
@@ -5240,7 +5652,7 @@ function renderHistorySyncBoard(rows = getFilteredHistoryRows()) {
   ].join("");
 
   if (!rows.length) {
-    holder.innerHTML = "<p class=\"muted\">当前筛选下暂无同步记录。</p>";
+    holder.innerHTML = '<p class="muted">当前筛选下暂无同步记录。</p>';
     return;
   }
 
@@ -5253,27 +5665,7 @@ function renderHistorySyncBoard(rows = getFilteredHistoryRows()) {
       const rightKey = String(rightReview?.updated_at || rightReview?.created_at || b.created_at || "");
       return rightKey.localeCompare(leftKey);
     })
-    .map((row) => {
-      const review = myReviewMap.get(row.id);
-      const ann = myAnnotationMap.get(row.id) ?? [];
-      const status = review?.status ?? row.review_status ?? "pending";
-      const scoreText = review?.score == null ? "-" : String(review.score);
-      const syncedAt = review ? formatDateTime(review.updated_at || review.created_at) : "老师尚未处理";
-      const comment = review?.comment || "老师暂未写评语。";
-      return `
-        <article class="sync-card">
-          <div class="sync-card-head">
-            <div>
-              <strong class="sync-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</strong>
-              <p class="sync-card-meta">老师处理时间：${escapeHtml(syncedAt)}</p>
-            </div>
-            <span class="status-chip ${statusClass(status)}">${STATUS_LABELS[status] ?? status}</span>
-          </div>
-          <p class="sync-card-meta">分数：${escapeHtml(scoreText)} · 图片 ${escapeHtml(String((row.image_urls ?? []).length))} 张 · 批注 ${escapeHtml(String(ann.length))} 张</p>
-          <p class="sync-card-comment">${escapeHtml(comment)}</p>
-        </article>
-      `;
-    })
+    .map((row) => buildStudentSyncCard(row))
     .join("");
 }
 
@@ -5300,11 +5692,11 @@ function renderHistoryList() {
   renderHistorySyncBoard(rows);
 
   if (!rows.length) {
-    holder.innerHTML = "<p class=\"muted\">当前筛选下暂无提交记录。</p>";
+    holder.innerHTML = '<p class="muted">当前筛选下暂无提交记录。</p>';
     return;
   }
 
-  rows
+  holder.innerHTML = rows
     .slice()
     .sort((a, b) => {
       if (a.study_date !== b.study_date) {
@@ -5312,33 +5704,8 @@ function renderHistoryList() {
       }
       return String(b.created_at).localeCompare(String(a.created_at));
     })
-    .forEach((row) => {
-      const review = myReviewMap.get(row.id);
-      const status = review?.status ?? row.review_status ?? "pending";
-      const score = review?.score ?? "-";
-      const comment = review?.comment ?? "暂无评语";
-      const ann = myAnnotationMap.get(row.id) ?? [];
-
-      const card = document.createElement("article");
-      card.className = "history-card";
-      if (row.id === historyHighlightedSubmissionId) {
-        card.classList.add("active");
-      }
-      card.dataset.historyRowId = row.id;
-      card.innerHTML = `
-        <div class="history-head">
-          <strong>${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}</strong>
-          <span class="status-chip ${statusClass(status)}">${STATUS_LABELS[status] ?? status}</span>
-        </div>
-        <p class="history-content">${escapeHtml(row.content || "")}</p>
-        <p class="history-meta">分数：${score} · 图片：${(row.image_urls ?? []).length} · 批注图：${ann.length}</p>
-        <p class="history-meta">评语：${escapeHtml(comment)}</p>
-        ${(row.word_summary || row.mistake_summary) ? `<p class="history-meta">词句总结：${escapeHtml(row.word_summary || "-")} ｜ 错因：${escapeHtml(row.mistake_summary || "-")}</p>` : ""}
-        <div>${renderImageThumbs(row.image_urls ?? [], true)}</div>
-        <div>${renderAnnotationThumbs(ann, true)}</div>
-      `;
-      holder.appendChild(card);
-    });
+    .map((row) => buildStudentHistoryCard(row, { active: row.id === historyHighlightedSubmissionId }))
+    .join("");
 }
 
 async function loadTeacherData(keepSelection = false) {

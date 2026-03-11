@@ -776,14 +776,136 @@ h3 {
 
 .history-card {
   border: 1px solid #decdb9;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.65);
-  padding: 0.58rem 0.66rem;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(31, 154, 138, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 249, 242, 0.86));
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.78rem;
+  box-shadow: 0 14px 28px rgba(67, 49, 35, 0.06);
+}
+
+.history-card.reviewed {
+  border-color: rgba(31, 154, 138, 0.22);
+}
+
+.history-card.pending {
+  background:
+    radial-gradient(circle at top right, rgba(242, 92, 43, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 252, 246, 0.9), rgba(255, 247, 238, 0.84));
 }
 
 .history-card.active {
   border-color: rgba(31, 154, 138, 0.52);
-  box-shadow: inset 0 0 0 1px rgba(31, 154, 138, 0.18), 0 10px 20px rgba(31, 154, 138, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(31, 154, 138, 0.18), 0 16px 30px rgba(31, 154, 138, 0.12);
+}
+
+.history-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.history-card-kicker {
+  margin: 0 0 0.24rem;
+  font-size: 0.74rem;
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #216b61;
+}
+
+.history-card-title {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.history-card-submeta {
+  margin: 0.24rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.history-card-stats,
+.sync-card-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.history-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.26rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid rgba(221, 202, 180, 0.96);
+  background: rgba(255, 255, 255, 0.76);
+  color: #5c4534;
+  font-size: 0.82rem;
+}
+
+.history-card-section-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.76rem;
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.history-card-quote {
+  margin: 0;
+  padding: 0.72rem 0.78rem;
+  border-radius: 16px;
+  border: 1px solid rgba(242, 92, 43, 0.16);
+  background: linear-gradient(135deg, rgba(255, 244, 236, 0.94), rgba(249, 255, 252, 0.88));
+  color: #432a1f;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.7;
+}
+
+.review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.55rem;
+}
+
+.review-summary-item {
+  border: 1px solid #dfccb8;
+  border-radius: 14px;
+  padding: 0.58rem 0.66rem;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.review-summary-label {
+  display: block;
+  margin-bottom: 0.24rem;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+.review-summary-value {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #3b291d;
+}
+
+.history-card-submission {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.history-card-actions,
+.sync-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
 }
 
 .history-sync-board {
@@ -820,27 +942,42 @@ h3 {
 .history-sync-list {
   margin-top: 0.66rem;
   display: grid;
-  gap: 0.58rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.7rem;
 }
 
 .sync-card {
   border: 1px solid #ddcab5;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  padding: 0.72rem;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(242, 92, 43, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 248, 240, 0.86));
+  padding: 0.82rem;
   display: grid;
-  gap: 0.3rem;
+  gap: 0.55rem;
+  box-shadow: 0 12px 22px rgba(67, 49, 35, 0.05);
+}
+
+.sync-card.reviewed {
+  border-color: rgba(31, 154, 138, 0.24);
+}
+
+.sync-card.pending {
+  background:
+    radial-gradient(circle at top right, rgba(242, 92, 43, 0.1), transparent 34%),
+    linear-gradient(180deg, rgba(255, 252, 246, 0.9), rgba(255, 247, 238, 0.84));
 }
 
 .sync-card-head {
   display: flex;
   justify-content: space-between;
-  align-items: start;
+  align-items: flex-start;
   gap: 0.7rem;
 }
 
 .sync-card-title {
   margin: 0;
+  font-size: 0.96rem;
 }
 
 .sync-card-meta {
@@ -850,30 +987,11 @@ h3 {
 }
 
 .sync-card-comment {
-  margin: 0.08rem 0 0;
+  margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.9rem;
-}
-
-.history-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.55rem;
-}
-
-.history-content {
-  margin: 0.42rem 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.92rem;
-}
-
-.history-meta {
-  margin: 0.24rem 0;
-  color: var(--ink-soft);
-  font-size: 0.83rem;
+  line-height: 1.65;
 }
 
 .guide-hero {
@@ -1622,6 +1740,195 @@ th {
   align-items: center;
 }
 
+#student-review-modal {
+  z-index: 95;
+}
+
+#image-preview-modal {
+  z-index: 100;
+}
+
+#annot-modal {
+  z-index: 110;
+}
+
+.student-review-modal-card {
+  width: min(1140px, 100%);
+  background:
+    radial-gradient(circle at top right, rgba(31, 154, 138, 0.14), transparent 28%),
+    radial-gradient(circle at left bottom, rgba(242, 92, 43, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(248, 255, 252, 0.95));
+}
+
+.student-review-modal-head {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.student-review-kicker {
+  margin: 0 0 0.22rem;
+  font-size: 0.74rem;
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #216b61;
+}
+
+.student-review-body {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.student-review-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+  gap: 0.85rem;
+}
+
+.student-review-panel {
+  border: 1px solid #decab2;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.74);
+  padding: 0.92rem;
+  display: grid;
+  gap: 0.7rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.student-review-panel-accent {
+  background: linear-gradient(145deg, rgba(255, 244, 236, 0.96), rgba(247, 255, 251, 0.94));
+}
+
+.student-review-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.student-review-section-head h4 {
+  margin: 0.12rem 0 0;
+  font-size: 1rem;
+}
+
+.student-review-section-kicker {
+  margin: 0;
+  font-size: 0.76rem;
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.student-review-comment {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.78;
+  color: #35261d;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.student-review-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.55rem;
+}
+
+.student-review-stat {
+  border-radius: 16px;
+  border: 1px solid #dfccb8;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 0.72rem 0.78rem;
+}
+
+.student-review-stat span {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.22rem;
+}
+
+.student-review-stat strong {
+  display: block;
+  font-size: 0.98rem;
+  color: #3b291d;
+  line-height: 1.45;
+}
+
+.student-review-content {
+  margin: 0;
+  padding: 0.86rem 0.92rem;
+  border-radius: 16px;
+  border: 1px solid #dfccb8;
+  background: rgba(255, 252, 247, 0.92);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.72;
+}
+
+.student-review-gallery-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.72rem;
+}
+
+.student-review-shot {
+  border-radius: 18px;
+  border: 1px solid #decab2;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.58rem;
+  display: grid;
+  gap: 0.48rem;
+}
+
+.student-review-shot img {
+  width: 100%;
+  height: 168px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid #dac7b1;
+  background: #fff;
+}
+
+.student-review-shot-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.student-review-shot-meta strong {
+  font-size: 0.92rem;
+}
+
+.student-review-shot-meta span {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+.student-review-shot-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  min-height: 2.5em;
+}
+
+.student-review-shot .btn {
+  width: 100%;
+}
+
+.student-review-empty {
+  border: 1px dashed #d7c3ab;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0.95rem;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
 .image-preview-card {
   width: min(1120px, 100%);
 }
@@ -1704,6 +2011,30 @@ th {
 
 .hidden {
   display: none !important;
+}
+
+@media (max-width: 760px) {
+  .history-sync-list,
+  .student-review-hero,
+  .student-review-gallery-list {
+    grid-template-columns: 1fr;
+  }
+
+  .history-card-actions .btn,
+  .sync-card-actions .btn {
+    width: 100%;
+  }
+
+  .student-review-modal-head {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .review-summary-grid,
+  .student-review-scoreboard {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes rise {
