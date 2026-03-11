@@ -2013,6 +2013,518 @@ th {
   display: none !important;
 }
 
+
+.teacher-review-workbench {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.teacher-review-sidebar,
+.teacher-review-stage {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.teacher-review-sidebar-card,
+.teacher-review-focus-card,
+.teacher-review-stage-panel,
+.teacher-review-form-card,
+.teacher-calendar-card {
+  border: 1px solid #ddc8b2;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(31, 154, 138, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(255, 252, 247, 0.94), rgba(247, 255, 252, 0.9));
+  box-shadow: 0 18px 34px rgba(59, 44, 31, 0.08);
+}
+
+.teacher-review-sidebar-card,
+.teacher-calendar-card,
+.teacher-review-form-card {
+  padding: 0.9rem;
+}
+
+.teacher-review-focus-card {
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.85rem;
+  background:
+    radial-gradient(circle at top right, rgba(242, 92, 43, 0.12), transparent 32%),
+    radial-gradient(circle at left bottom, rgba(31, 154, 138, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(248, 255, 252, 0.94));
+}
+
+.teacher-review-focus-head,
+.teacher-review-section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.teacher-review-section-title h3,
+.teacher-review-section-title h4 {
+  margin: 0.1rem 0 0;
+}
+
+.teacher-review-kicker {
+  margin: 0 0 0.2rem;
+  font-size: 0.74rem;
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #216b61;
+}
+
+.teacher-review-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.42rem;
+}
+
+.teacher-review-pill,
+.teacher-review-empty-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0.24rem 0.68rem;
+  border-radius: 999px;
+  border: 1px solid rgba(221, 202, 181, 0.98);
+  background: rgba(255, 255, 255, 0.78);
+  color: #4d3728;
+  font-size: 0.82rem;
+}
+
+.teacher-review-pill-strong {
+  font-weight: 700;
+}
+
+.teacher-review-pill.is-good {
+  border-color: rgba(11, 138, 120, 0.24);
+  background: rgba(11, 138, 120, 0.12);
+  color: #0b7b6d;
+}
+
+.teacher-review-pill.is-mid {
+  border-color: rgba(242, 92, 43, 0.22);
+  background: rgba(242, 92, 43, 0.1);
+  color: #9a4b24;
+}
+
+.teacher-review-pill.is-warn {
+  border-color: rgba(214, 59, 42, 0.24);
+  background: rgba(214, 59, 42, 0.1);
+  color: #9a1f1f;
+}
+
+.teacher-review-empty-pill {
+  color: var(--ink-soft);
+}
+
+.teacher-review-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.teacher-review-stage-panel {
+  padding: 0.88rem;
+  display: grid;
+  gap: 0.75rem;
+  min-height: 260px;
+}
+
+.teacher-review-form-card {
+  margin-top: 0;
+  border-style: solid;
+}
+
+.teacher-review-save-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.teacher-review-list {
+  margin: 0;
+  max-height: 540px;
+}
+
+.teacher-saved-review-list {
+  margin: 0;
+  max-height: 280px;
+}
+
+.review-image-board,
+.review-annotation-board {
+  min-height: 160px;
+}
+
+.teacher-review-placeholder {
+  min-height: 120px;
+  border: 1px dashed #d8c4ad;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink-soft);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.review-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.review-source-card {
+  display: grid;
+  border: 1px solid #decbb6;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  overflow: hidden;
+}
+
+.review-source-card.is-annotated {
+  border-color: rgba(11, 138, 120, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(11, 138, 120, 0.12);
+}
+
+.review-source-card.is-pending {
+  border-color: rgba(242, 92, 43, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(242, 92, 43, 0.08);
+}
+
+.review-source-media {
+  position: relative;
+  padding: 0.55rem;
+  padding-bottom: 0;
+}
+
+.review-source-img {
+  width: 100%;
+  height: 168px;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 1px solid #d8c4af;
+  background: #fff;
+}
+
+.review-source-index,
+.review-source-state {
+  position: absolute;
+  top: 1rem;
+  min-height: 24px;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  line-height: 24px;
+}
+
+.review-source-index {
+  left: 1rem;
+  background: rgba(23, 23, 23, 0.76);
+  color: #fff;
+}
+
+.review-source-state {
+  right: 1rem;
+}
+
+.review-source-state.done {
+  background: #0b8a78;
+  color: #fff;
+}
+
+.review-source-state.pending {
+  background: rgba(214, 59, 42, 0.94);
+  color: #fff;
+}
+
+.review-source-body {
+  padding: 0.74rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.review-source-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.review-source-meta strong {
+  font-size: 0.94rem;
+}
+
+.review-source-meta span {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.review-source-note {
+  margin: 0;
+  min-height: 3.2em;
+  color: #5b4638;
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.review-source-actions {
+  margin-top: auto;
+}
+
+.review-annotation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.annot-item {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: stretch;
+  max-width: none;
+  padding: 0.58rem;
+  border: 1px solid #dfccb7;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.annot-note-stack {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.annot-source-tag {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  padding: 0.18rem 0.48rem;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 154, 138, 0.18);
+  background: rgba(31, 154, 138, 0.12);
+  color: #0d7d71;
+  font-size: 0.74rem;
+}
+
+.annot-note {
+  text-align: left;
+}
+
+.submission-day-title,
+.submission-day-metrics {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.submission-day.is-today .submission-day-summary {
+  background: linear-gradient(120deg, rgba(255, 241, 239, 0.92), rgba(255, 248, 243, 0.88));
+}
+
+.submission-fold-summary {
+  align-items: flex-start;
+}
+
+.submission-fold-main {
+  display: grid;
+  gap: 0.36rem;
+}
+
+.submission-fold-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.submission-mini-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #deccb8;
+  background: rgba(255, 255, 255, 0.76);
+  color: #5c4534;
+  font-size: 0.78rem;
+}
+
+.submission-mini-pill.is-full {
+  border-color: rgba(11, 138, 120, 0.24);
+  background: rgba(11, 138, 120, 0.14);
+  color: #0b7c6d;
+}
+
+.submission-mini-pill.is-partial {
+  border-color: rgba(242, 92, 43, 0.24);
+  background: rgba(242, 92, 43, 0.12);
+  color: #9a4b24;
+}
+
+.submission-mini-pill.is-none {
+  border-color: rgba(214, 59, 42, 0.24);
+  background: rgba(214, 59, 42, 0.12);
+  color: #9a1f1f;
+}
+
+.today-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 0.62rem;
+  border-radius: 999px;
+  border: 1px solid rgba(196, 53, 53, 0.42);
+  background: rgba(214, 59, 42, 0.12);
+  color: #b42318;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.history-card-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.history-card.is-today,
+.sync-card.is-today,
+.translation-attempt-card.is-today {
+  border-color: rgba(214, 59, 42, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(214, 59, 42, 0.16), 0 14px 28px rgba(180, 35, 24, 0.08);
+}
+
+.date-chip.is-today {
+  border-style: solid;
+  border-color: rgba(214, 59, 42, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(214, 59, 42, 0.18);
+}
+
+.calendar-cell.is-today {
+  border-color: rgba(214, 59, 42, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(214, 59, 42, 0.18), 0 12px 20px rgba(214, 59, 42, 0.08);
+  background: linear-gradient(180deg, rgba(255, 248, 247, 0.95), rgba(255, 255, 255, 0.82));
+}
+
+.calendar-cell-day-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+}
+
+.calendar-today-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: #d63b2a;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.annot-modal-card {
+  width: min(1180px, 100%);
+}
+
+.annot-modal-layout {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
+  gap: 0.9rem;
+}
+
+.annot-stage-panel {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.annot-stage-panel .annot-canvas-wrap {
+  min-height: min(62vh, 640px);
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(245, 255, 252, 0.94));
+}
+
+.annot-side-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.annot-side-block {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid #decbb6;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.8rem;
+}
+
+.annot-side-block h4 {
+  margin: 0.1rem 0 0;
+}
+
+.annot-context {
+  margin: 0;
+  color: #3c2b20;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.annot-action-stack {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.annot-action-stack .btn {
+  width: 100%;
+}
+
+@media (max-width: 1080px) {
+  .teacher-review-workbench,
+  .teacher-review-stage-grid,
+  .annot-modal-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-review-stat-strip {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .teacher-review-focus-head,
+  .teacher-review-section-title,
+  .teacher-review-save-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .review-source-grid,
+  .review-annotation-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .history-sync-list,
   .student-review-hero,

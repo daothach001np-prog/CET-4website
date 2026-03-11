@@ -120,6 +120,7 @@ const previewState = {
   title: "作业图片预览",
   tip: "旋转、翻转和缩放只影响当前预览，不会改动原图。",
   allowAnnotate: false,
+  enableTransforms: false,
   rotation: 0,
   scale: 1,
   flipX: 1,
@@ -283,6 +284,7 @@ function cacheUi() {
     "teacher-load-btn",
     "teacher-review-list",
     "review-target",
+    "review-selection-stats",
     "review-images",
     "review-annotations",
     "review-status",
@@ -387,6 +389,7 @@ function cacheUi() {
     "annot-modal",
     "annot-modal-title",
     "annot-modal-tip",
+    "annot-context",
     "annot-close-btn",
     "annot-canvas",
     "annot-note",
@@ -639,7 +642,13 @@ function bindEvents() {
       const submissionId = previewBtn.dataset.submissionId;
       const source = previewBtn.dataset.sourceUrl;
       if (submissionId && source) {
-        openImagePreview(submissionId, decodeURIComponent(source));
+        const sourceUrl = decodeURIComponent(source);
+        openImagePreview(submissionId, sourceUrl, {
+          allowAnnotate: true,
+          enableTransforms: false,
+          title: buildSourcePreviewTitle(submissionId, sourceUrl),
+          tip: "Preview is zoom-only here. Use Annotate to mark directly.",
+        });
       }
       return;
     }
@@ -1768,14 +1777,14 @@ function renderCalendarGrid(holder, monthDate, marks, countMap, options = {}) {
   }
 
   if (!calendarFeatureReady) {
-    holder.innerHTML = "<p class=\"muted\">当前数据库还没升级到新版打卡日历，执行最新 schema.sql 后这里会自动启用。</p>";
+    holder.innerHTML = `<p class="muted">Calendar data is not ready in the database yet.</p>`;
     return;
   }
 
   const editable = Boolean(options.editable);
   const filterable = Boolean(options.filterable);
   const selectedDate = String(options.selectedDate || "");
-  const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const markMap = new Map((marks ?? []).map((row) => [row.mark_date, row]));
   const cells = buildCalendarCells(monthDate);
   const today = toIsoDate(new Date());
@@ -1784,7 +1793,7 @@ function renderCalendarGrid(holder, monthDate, marks, countMap, options = {}) {
     ...weekdays.map((day) => `<div class="calendar-weekday">${day}</div>`),
     ...cells.map((cell) => {
       if (!cell.iso) {
-        return "<div class=\"calendar-cell is-empty\" aria-hidden=\"true\"></div>";
+        return `<div class="calendar-cell is-empty" aria-hidden="true"></div>`;
       }
       const row = markMap.get(cell.iso);
       const kind = normalizeCalendarMarkKind(row?.kind);
@@ -1796,22 +1805,26 @@ function renderCalendarGrid(holder, monthDate, marks, countMap, options = {}) {
         filterable && selectedDate === cell.iso ? "is-filtered" : "",
       ].filter(Boolean).join(" ");
       const markHtml = kind === "none"
-        ? "<span class=\"calendar-mark\"></span>"
+        ? `<span class="calendar-mark"></span>`
         : `<span class="calendar-mark kind-${kind}" title="${CALENDAR_MARK_LABELS[kind] ?? kind}"></span>`;
       const countHtml = count > 0 ? `<span class="calendar-count-badge">${count}</span>` : "";
+      const todayHtml = cell.iso === today ? `<span class="calendar-today-pill">Today</span>` : "";
       const inner = `
         <span class="calendar-cell-head">
-          <span class="calendar-cell-day">${cell.day}</span>
-          <span class="calendar-cell-submissions">${count > 0 ? `${count} 模块` : "未提交"}</span>
+          <span class="calendar-cell-day-wrap">
+            <span class="calendar-cell-day">${cell.day}</span>
+            ${todayHtml}
+          </span>
+          <span class="calendar-cell-submissions">${count > 0 ? `${count} modules` : "No submit"}</span>
         </span>
         ${markHtml}
         ${countHtml}
       `;
       if (editable) {
-        return `<button class="${classes}" type="button" data-calendar-date="${cell.iso}" title="点击切换老师标记">${inner}</button>`;
+        return `<button class="${classes}" type="button" data-calendar-date="${cell.iso}" title="Switch teacher mark">${inner}</button>`;
       }
       if (filterable) {
-        return `<button class="${classes}" type="button" data-history-date="${cell.iso}" title="${selectedDate === cell.iso ? "点击取消日期筛选" : `按 ${cell.iso} 筛选提交记录`}">${inner}</button>`;
+        return `<button class="${classes}" type="button" data-history-date="${cell.iso}" title="${selectedDate === cell.iso ? "Clear date filter" : `Filter by ${cell.iso}`}">${inner}</button>`;
       }
       return `<article class="${classes}">${inner}</article>`;
     }),
@@ -1878,11 +1891,14 @@ async function cycleTeacherCalendarMark(markDate) {
 function openImagePreview(submissionId, sourceUrl, options = {}) {
   const row = findSubmissionRecord(submissionId);
   const defaultTitle = row
-    ? `作业图片预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
-    : "作业图片预览";
+    ? `Image Preview · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
+    : "Image Preview";
   const allowAnnotate = options.allowAnnotate ?? isReviewerProfile();
+  const enableTransforms = Boolean(options.enableTransforms);
   const title = options.title || defaultTitle;
-  const tip = options.tip || "旋转、翻转和缩放只影响当前预览，不会改动原图。";
+  const tip = options.tip || (enableTransforms
+    ? "Rotate and flip only affect this preview."
+    : "Zoom-only preview. The original image never changes.");
 
   previewState.open = true;
   previewState.submissionId = submissionId;
@@ -1890,6 +1906,7 @@ function openImagePreview(submissionId, sourceUrl, options = {}) {
   previewState.title = title;
   previewState.tip = tip;
   previewState.allowAnnotate = allowAnnotate;
+  previewState.enableTransforms = enableTransforms;
   previewState.rotation = 0;
   previewState.scale = 1;
   previewState.flipX = 1;
@@ -1899,6 +1916,7 @@ function openImagePreview(submissionId, sourceUrl, options = {}) {
   ui["image-preview-title"].textContent = title;
   ui["image-preview-tip"].textContent = tip;
   ui["image-preview-open-annot-btn"].classList.toggle("hidden", !allowAnnotate);
+  setImagePreviewToolVisibility();
   ui["image-preview-modal"].classList.remove("hidden");
   applyImagePreviewTransform();
 }
@@ -1907,15 +1925,25 @@ function closeImagePreview() {
   previewState.open = false;
   previewState.submissionId = null;
   previewState.sourceUrl = "";
-  previewState.title = "作业图片预览";
-  previewState.tip = "旋转、翻转和缩放只影响当前预览，不会改动原图。";
+  previewState.title = "Image Preview";
+  previewState.tip = "Zoom-only preview. The original image never changes.";
   previewState.allowAnnotate = false;
+  previewState.enableTransforms = false;
   resetImagePreviewTransform(false);
   ui["image-preview-img"].removeAttribute("src");
-  ui["image-preview-title"].textContent = "作业图片预览";
-  ui["image-preview-tip"].textContent = "旋转、翻转和缩放只影响当前预览，不会改动原图。";
+  ui["image-preview-title"].textContent = "Image Preview";
+  ui["image-preview-tip"].textContent = "Zoom-only preview. The original image never changes.";
   ui["image-preview-open-annot-btn"].classList.toggle("hidden", !isReviewerProfile());
+  setImagePreviewToolVisibility();
   ui["image-preview-modal"].classList.add("hidden");
+}
+
+function setImagePreviewToolVisibility() {
+  const showTransforms = Boolean(previewState.enableTransforms);
+  ui["image-preview-rotate-left-btn"].classList.toggle("hidden", !showTransforms);
+  ui["image-preview-rotate-right-btn"].classList.toggle("hidden", !showTransforms);
+  ui["image-preview-flip-x-btn"].classList.toggle("hidden", !showTransforms);
+  ui["image-preview-flip-y-btn"].classList.toggle("hidden", !showTransforms);
 }
 
 function applyImagePreviewTransform() {
@@ -4589,7 +4617,7 @@ async function updateSubmissionReviewStatusWithVerification(submissionId, status
           .select("id,review_status")
           .maybeSingle(),
         22000,
-        "更新提交状态超时"
+        "Update submission status timed out"
       ),
     {
       retries: UPSERT_MAX_RETRY,
@@ -4618,7 +4646,7 @@ async function verifySubmissionStatus(submissionId, status) {
         .eq("id", submissionId)
         .maybeSingle(),
       12000,
-      "校验提交状态超时"
+      "Verify submission status timed out"
     ).catch((queryError) => ({ data: null, error: queryError }));
 
     if (!error && data?.id === submissionId && data?.review_status === status) {
@@ -4627,6 +4655,109 @@ async function verifySubmissionStatus(submissionId, status) {
     await sleep(420 * (attempt + 1));
   }
   return null;
+}
+
+async function saveAnnotationRecordWithVerification(payload, options = {}) {
+  const isEdit = Boolean(options.annotationId);
+  const response = await runWithRetry(
+    () =>
+      withTimeout(
+        isEdit
+          ? supabase
+              .from("image_annotations")
+              .update({
+                source_image_url: payload.source_image_url,
+                annotated_image_url: payload.annotated_image_url,
+                note: payload.note,
+              })
+              .eq("id", options.annotationId)
+              .select("*")
+              .maybeSingle()
+          : supabase
+              .from("image_annotations")
+              .insert(payload)
+              .select("*")
+              .maybeSingle(),
+        22000,
+        isEdit ? "Update annotation record timed out" : "Insert annotation record timed out"
+      ),
+    {
+      retries: UPSERT_MAX_RETRY,
+      baseDelayMs: 680,
+      shouldRetry: (error) => isRetryableError(error),
+    }
+  );
+
+  if (!response?.error) {
+    return { data: response.data ?? null, recovered: false, error: null };
+  }
+
+  const verified = await verifyAnnotationRecord(payload, options);
+  if (verified) {
+    return { data: verified, recovered: true, error: null };
+  }
+  return { data: null, recovered: false, error: response.error };
+}
+
+async function verifyAnnotationRecord(payload, options = {}) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (options.annotationId) {
+      const { data, error } = await withTimeout(
+        supabase
+          .from("image_annotations")
+          .select("*")
+          .eq("id", options.annotationId)
+          .maybeSingle(),
+        12000,
+        "Verify annotation record timed out"
+      ).catch((queryError) => ({ data: null, error: queryError }));
+
+      if (!error && annotationMatchesPayload(data, payload, options)) {
+        return data;
+      }
+    } else {
+      const { data, error } = await withTimeout(
+        supabase
+          .from("image_annotations")
+          .select("*")
+          .eq("submission_id", payload.submission_id)
+          .eq("teacher_id", payload.teacher_id)
+          .eq("annotated_image_url", payload.annotated_image_url)
+          .order("created_at", { ascending: false })
+          .limit(3),
+        12000,
+        "Verify annotation record timed out"
+      ).catch((queryError) => ({ data: [], error: queryError }));
+
+      if (!error) {
+        const row = (Array.isArray(data) ? data : []).find((item) => annotationMatchesPayload(item, payload, options));
+        if (row) {
+          return row;
+        }
+      }
+    }
+
+    await sleep(420 * (attempt + 1));
+  }
+  return null;
+}
+
+function annotationMatchesPayload(row, payload, options = {}) {
+  if (!row || !payload) {
+    return false;
+  }
+
+  if (options.annotationId && String(row.id) !== String(options.annotationId)) {
+    return false;
+  }
+
+  return (
+    row.submission_id === payload.submission_id
+    && row.teacher_id === payload.teacher_id
+    && String(row.source_image_url || "") === String(payload.source_image_url || "")
+    && String(row.annotated_image_url || "") === String(payload.annotated_image_url || "")
+    && String(row.note || "").trim() === String(payload.note || "").trim()
+  );
 }
 
 async function uploadSubmissionImages(studentId, studyDate, module, files, onProgress = () => {}) {
@@ -5276,6 +5407,118 @@ function findSubmissionRecord(submissionId) {
     || null;
 }
 
+function getSubmissionImageIndex(submissionId, sourceImageUrl) {
+  const row = findSubmissionRecord(submissionId);
+  if (!row || !Array.isArray(row.image_urls)) {
+    return -1;
+  }
+  return row.image_urls.findIndex((url) => url === sourceImageUrl);
+}
+
+function describeSubmissionSourceImage(submissionId, sourceImageUrl, fallback = "Image") {
+  const index = getSubmissionImageIndex(submissionId, sourceImageUrl);
+  if (index >= 0) {
+    return `Image ${index + 1}`;
+  }
+  return fallback;
+}
+
+function buildSourcePreviewTitle(submissionId, sourceImageUrl) {
+  const row = findSubmissionRecord(submissionId);
+  const sourceLabel = describeSubmissionSourceImage(submissionId, sourceImageUrl, "Image");
+  if (!row) {
+    return `Original Preview · ${sourceLabel}`;
+  }
+  return `Original Preview · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module} · ${sourceLabel}`;
+}
+
+function buildAnnotationContextText(submissionId, sourceImageUrl) {
+  const row = findSubmissionRecord(submissionId);
+  const sourceLabel = describeSubmissionSourceImage(submissionId, sourceImageUrl, "Image");
+  if (!row) {
+    return sourceLabel;
+  }
+  return `${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module} · ${sourceLabel}`;
+}
+
+function getAnnotationSourceMap(submissionId) {
+  const map = new Map();
+  const rows = annotationMapBySubmission.get(submissionId) ?? [];
+  for (const row of rows) {
+    const key = String(row.source_image_url || "");
+    if (!key) {
+      continue;
+    }
+    if (!map.has(key)) {
+      map.set(key, []);
+    }
+    map.get(key).push(row);
+  }
+  return map;
+}
+
+function getAnnotationCoverage(submissionId, urls = []) {
+  const sourceMap = getAnnotationSourceMap(submissionId);
+  const totalImages = urls.length;
+  const annotatedSources = urls.filter((url) => sourceMap.has(url)).length;
+  const totalAnnotations = [...sourceMap.values()].reduce((sum, rows) => sum + rows.length, 0);
+  let state = "none";
+  if (totalImages === 0) {
+    state = "empty";
+  } else if (annotatedSources === totalImages) {
+    state = "full";
+  } else if (annotatedSources > 0) {
+    state = "partial";
+  }
+  return {
+    totalImages,
+    annotatedSources,
+    totalAnnotations,
+    sourceMap,
+    state,
+  };
+}
+
+function renderReviewPlaceholder(message) {
+  return `<div class="teacher-review-placeholder">${escapeHtml(message)}</div>`;
+}
+
+function isTodayDate(value) {
+  return String(value || "") === toIsoDate(new Date());
+}
+
+function renderTodayBadge(value, label = "Today") {
+  if (!isTodayDate(value)) {
+    return "";
+  }
+  return `<span class="today-badge">${escapeHtml(label)}</span>`;
+}
+
+function buildReviewSelectionStatsMarkup(item) {
+  if (!item) {
+    return '<span class="teacher-review-empty-pill">Select one item on the left</span>';
+  }
+
+  const review = teacherReviewMap.get(item.id);
+  const status = review?.status ?? item.review_status ?? "pending";
+  const coverage = getAnnotationCoverage(item.id, item.image_urls ?? []);
+  const pills = [
+    `<span class="teacher-review-pill teacher-review-pill-strong">${escapeHtml(displayName(item.student_id))}</span>`,
+    `<span class="teacher-review-pill">${escapeHtml(MODULE_LABELS[item.module] ?? item.module)}</span>`,
+    `<span class="teacher-review-pill">Images ${escapeHtml(String(coverage.totalImages))}</span>`,
+    `<span class="teacher-review-pill ${coverage.state === "full" ? "is-good" : coverage.state === "none" ? "is-warn" : "is-mid"}">Annotated ${escapeHtml(String(coverage.annotatedSources))}/${escapeHtml(String(coverage.totalImages))}</span>`,
+    `<span class="teacher-review-pill">Marks ${escapeHtml(String(coverage.totalAnnotations))}</span>`,
+    `<span class="status-chip ${statusClass(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>`,
+  ];
+
+  const todayBadge = renderTodayBadge(item.study_date);
+  if (todayBadge) {
+    pills.push(todayBadge);
+  }
+
+  return pills.join("");
+}
+
 function summarizeText(text, limit = 88) {
   const raw = String(text || "").trim().replace(/\s+/g, " ");
   if (!raw) {
@@ -5320,64 +5563,68 @@ function buildStudentHistoryCard(row, options = {}) {
   const annotations = myAnnotationMap.get(row.id) ?? [];
   const status = review?.status ?? row.review_status ?? "pending";
   const hasReview = Boolean(review) || annotations.length > 0;
-  const scoreText = review?.score == null ? "待评分" : `${review.score} 分`;
+  const scoreText = review?.score == null ? "Pending" : `${review.score}`;
   const createdAt = formatDateTime(row.created_at);
-  const reviewedAt = review ? formatDateTime(review.updated_at || review.created_at) : "等待老师处理";
-  const comment = review?.comment || (hasReview ? "老师已处理，暂未填写详细评语。" : "老师处理后，这里会展示分数、评语和图片批注。");
-  const submissionExcerpt = summarizeText(row.content, hasReview ? 78 : 96) || "这次主要通过图片提交。";
+  const reviewedAt = review ? formatDateTime(review.updated_at || review.created_at) : "Waiting for teacher review";
+  const comment = review?.comment || (hasReview ? "Processed, comment is empty for now." : "Teacher review details will appear here later.");
+  const submissionExcerpt = summarizeText(row.content, hasReview ? 78 : 96) || "This entry was mostly image-based.";
   const summaryGrid = buildStudentSummaryGrid(row);
   const firstImage = row.image_urls?.[0];
   const firstAnnot = annotations[0]?.annotated_image_url;
   const previewBase = `${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`;
+  const todayBadge = renderTodayBadge(row.study_date);
   const actions = [
-    buildReviewActionButton("open-detail", hasReview ? "查看批改详情" : "查看作业详情", row.id, {}, hasReview ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"),
+    buildReviewActionButton("open-detail", hasReview ? "Open Review" : "Open Work", row.id, {}, hasReview ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"),
     firstAnnot
       ? buildReviewActionButton(
           "preview-annot",
-          "查看批注大图",
+          "Marked Image",
           row.id,
           {
             "data-source-url": encodeURIComponent(firstAnnot),
-            "data-preview-title": `老师批注图 · ${previewBase}`,
-            "data-preview-tip": "这是老师圈画后的批注图，可放大查看细节。",
+            "data-preview-title": `Teacher Markup · ${previewBase}` ,
+            "data-preview-tip": "This is the teacher-marked image.",
           }
         )
       : "",
     firstImage
       ? buildReviewActionButton(
           "preview-origin",
-          "查看原图",
+          "Original",
           row.id,
           {
             "data-source-url": encodeURIComponent(firstImage),
-            "data-preview-title": `作业原图 · ${previewBase}`,
-            "data-preview-tip": "这是你提交给老师的原始作业图片。",
+            "data-preview-title": `Original Image · ${previewBase}` ,
+            "data-preview-tip": "This is the original submission image.",
           }
         )
       : "",
   ].filter(Boolean).join("");
 
   return `
-    <article class="history-card ${hasReview ? "reviewed" : "pending"}${options.active ? " active" : ""}" data-history-row-id="${escapeAttr(row.id)}">
+    <article class="history-card ${hasReview ? "reviewed" : "pending"}${options.active ? " active" : ""}${isTodayDate(row.study_date) ? " is-today" : ""}" data-history-row-id="${escapeAttr(row.id)}">
       <div class="history-card-head">
         <div>
-          <p class="history-card-kicker">${hasReview ? "老师已批改" : "等待老师处理"}</p>
-          <h3 class="history-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</h3>
-          <p class="history-card-submeta">提交 ${escapeHtml(createdAt)} · ${hasReview ? `老师处理 ${escapeHtml(reviewedAt)}` : "老师尚未处理"}</p>
+          <p class="history-card-kicker">${hasReview ? "Teacher Reviewed" : "Waiting for Review"}</p>
+          <div class="history-card-title-row">
+            <h3 class="history-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</h3>
+            ${todayBadge}
+          </div>
+          <p class="history-card-submeta">Submitted ${escapeHtml(createdAt)} · ${hasReview ? `Teacher updated ${escapeHtml(reviewedAt)}` : "Teacher has not handled it yet"}</p>
         </div>
         <span class="status-chip ${statusClass(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>
       </div>
       <div class="history-card-stats">
-        <span class="history-stat-pill">分数 ${escapeHtml(scoreText)}</span>
-        <span class="history-stat-pill">原图 ${(row.image_urls ?? []).length}</span>
-        <span class="history-stat-pill">批注 ${annotations.length}</span>
+        <span class="history-stat-pill">Score ${escapeHtml(scoreText)}</span>
+        <span class="history-stat-pill">Images ${(row.image_urls ?? []).length}</span>
+        <span class="history-stat-pill">Marks ${annotations.length}</span>
       </div>
       <div>
-        <p class="history-card-section-label">老师评语</p>
+        <p class="history-card-section-label">Teacher Comment</p>
         <blockquote class="history-card-quote">${escapeHtml(comment)}</blockquote>
       </div>
       ${summaryGrid || ""}
-      <p class="history-card-submission">提交内容摘要：${escapeHtml(submissionExcerpt)}</p>
+      <p class="history-card-submission">Submission summary: ${escapeHtml(submissionExcerpt)}</p>
       <div class="history-card-actions">${actions}</div>
     </article>
   `;
@@ -5388,55 +5635,59 @@ function buildStudentSyncCard(row) {
   const annotations = myAnnotationMap.get(row.id) ?? [];
   const status = review?.status ?? row.review_status ?? "pending";
   const hasReview = Boolean(review) || annotations.length > 0;
-  const comment = review?.comment || (hasReview ? "老师已处理，暂未填写详细评语。" : "老师尚未处理。处理后会同步到这里。");
-  const scoreText = review?.score == null ? "待评分" : `${review.score} 分`;
-  const syncTime = review ? formatDateTime(review.updated_at || review.created_at) : "待老师处理";
+  const comment = review?.comment || (hasReview ? "Processed, comment is empty for now." : "Teacher updates will sync here later.");
+  const scoreText = review?.score == null ? "Pending" : `${review.score}`;
+  const syncTime = review ? formatDateTime(review.updated_at || review.created_at) : "Waiting for teacher review";
   const firstImage = row.image_urls?.[0];
   const firstAnnot = annotations[0]?.annotated_image_url;
   const previewBase = `${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`;
+  const todayBadge = renderTodayBadge(row.study_date);
   const actions = [
-    buildReviewActionButton("open-detail", hasReview ? "查看批改详情" : "查看作业详情", row.id, {}, hasReview ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"),
+    buildReviewActionButton("open-detail", hasReview ? "Open Review" : "Open Work", row.id, {}, hasReview ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"),
     firstAnnot
       ? buildReviewActionButton(
           "preview-annot",
-          "批注大图",
+          "Marked Image",
           row.id,
           {
             "data-source-url": encodeURIComponent(firstAnnot),
-            "data-preview-title": `老师批注图 · ${previewBase}`,
-            "data-preview-tip": "这是老师圈画后的批注图，可放大查看细节。",
+            "data-preview-title": `Teacher Markup · ${previewBase}` ,
+            "data-preview-tip": "This is the teacher-marked image.",
           }
         )
       : "",
     firstImage
       ? buildReviewActionButton(
           "preview-origin",
-          "原图",
+          "Original",
           row.id,
           {
             "data-source-url": encodeURIComponent(firstImage),
-            "data-preview-title": `作业原图 · ${previewBase}`,
-            "data-preview-tip": "这是你提交给老师的原始作业图片。",
+            "data-preview-title": `Original Image · ${previewBase}` ,
+            "data-preview-tip": "This is the original submission image.",
           }
         )
       : "",
   ].filter(Boolean).join("");
 
   return `
-    <article class="sync-card ${hasReview ? "reviewed" : "pending"}">
+    <article class="sync-card ${hasReview ? "reviewed" : "pending"}${isTodayDate(row.study_date) ? " is-today" : ""}">
       <div class="sync-card-head">
         <div>
-          <strong class="sync-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</strong>
-          <p class="sync-card-meta">老师处理时间：${escapeHtml(syncTime)}</p>
+          <div class="history-card-title-row">
+            <strong class="sync-card-title">${escapeHtml(row.study_date)} · ${escapeHtml(MODULE_LABELS[row.module] ?? row.module)}</strong>
+            ${todayBadge}
+          </div>
+          <p class="sync-card-meta">Teacher updated: ${escapeHtml(syncTime)}</p>
         </div>
         <span class="status-chip ${statusClass(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>
       </div>
       <div class="sync-card-pills">
-        <span class="history-stat-pill">分数 ${escapeHtml(scoreText)}</span>
-        <span class="history-stat-pill">原图 ${(row.image_urls ?? []).length}</span>
-        <span class="history-stat-pill">批注 ${annotations.length}</span>
+        <span class="history-stat-pill">Score ${escapeHtml(scoreText)}</span>
+        <span class="history-stat-pill">Images ${(row.image_urls ?? []).length}</span>
+        <span class="history-stat-pill">Marks ${annotations.length}</span>
       </div>
-      <p class="sync-card-comment">${escapeHtml(summarizeText(comment, 88) || "老师处理后会在这里显示评语。")}</p>
+      <p class="sync-card-comment">${escapeHtml(summarizeText(comment, 88) || "Teacher updates will show here.")}</p>
       <div class="sync-card-actions">${actions}</div>
     </article>
   `;
@@ -5639,8 +5890,9 @@ function handleStudentReviewActionClick(event) {
   }
   openImagePreview(submissionId, decodeURIComponent(sourceUrl), {
     allowAnnotate: false,
-    title: actionBtn.dataset.previewTitle || "作业图片预览",
-    tip: actionBtn.dataset.previewTip || "旋转、翻转和缩放只影响当前预览，不会改动原图。",
+    enableTransforms: false,
+    title: actionBtn.dataset.previewTitle || "Image Preview",
+    tip: actionBtn.dataset.previewTip || "Preview is zoom-only and does not change the original image.",
   });
 }
 
@@ -5744,22 +5996,21 @@ async function loadTeacherData(keepSelection = false) {
   annotationMapBySubmission = await loadAnnotationMap(submissionCache.map((x) => x.id));
   teacherReviewMap = await loadReviewMap(submissionCache.map((x) => x.id));
 
-  if (!keepSelection) {
-    clearReviewEditor();
-  }
-
   renderTeacherSubmissionList();
   renderTeacherSavedReviewList();
   renderTeacherCalendarStudentOptions();
 
-  if (keepSelection && selectedSubmissionId) {
+  if (selectedSubmissionId) {
     const exists = submissionCache.some((x) => x.id === selectedSubmissionId);
     if (exists) {
-      await selectSubmissionForReview(selectedSubmissionId, true);
+      await selectSubmissionForReview(selectedSubmissionId, keepSelection);
     } else {
       clearReviewEditor();
     }
+    return;
   }
+
+  clearReviewEditor();
 }
 
 function renderTeacherSubmissionList() {
@@ -5767,7 +6018,7 @@ function renderTeacherSubmissionList() {
   list.innerHTML = "";
 
   if (!submissionCache.length) {
-    list.innerHTML = "<p class=\"muted\">当前筛选下没有提交。</p>";
+    list.innerHTML = `<p class="muted">No submissions match the current filter.</p>`;
     return;
   }
 
@@ -5779,11 +6030,13 @@ function renderTeacherSubmissionList() {
     byDay.get(row.study_date).push(row);
   }
 
+  const today = toIsoDate(new Date());
   const dayEntries = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   for (const [day, rows] of dayEntries) {
+    const isToday = day === today;
     const dayWrap = document.createElement("details");
-    dayWrap.className = "submission-day";
-    if (rows.some((x) => x.id === selectedSubmissionId)) {
+    dayWrap.className = `submission-day${isToday ? " is-today" : ""}`;
+    if (isToday || rows.some((x) => x.id === selectedSubmissionId)) {
       dayWrap.open = true;
     }
 
@@ -5794,8 +6047,8 @@ function renderTeacherSubmissionList() {
     const daySummary = document.createElement("summary");
     daySummary.className = "submission-day-summary";
     daySummary.innerHTML = `
-      <span><strong>${day}</strong> · ${rows.length} 条提交</span>
-      <span class="archive-status">通过 ${passed} / 退回 ${returned} / 待处理 ${pending}</span>
+      <span class="submission-day-title"><strong>${day}</strong>${renderTodayBadge(day)}</span>
+      <span class="submission-day-metrics">Passed ${passed} / Returned ${returned} / Pending ${pending}</span>
     `;
     dayWrap.appendChild(daySummary);
 
@@ -5809,24 +6062,39 @@ function renderTeacherSubmissionList() {
         fold.open = true;
       }
 
-      const annCount = (annotationMapBySubmission.get(row.id) ?? []).length;
-      const imgCount = (row.image_urls ?? []).length;
+      const coverage = getAnnotationCoverage(row.id, row.image_urls ?? []);
+      const imgCount = coverage.totalImages;
       const snippet = row.content.length > 200 ? `${row.content.slice(0, 200)}...` : row.content;
+      const coverageText = imgCount === 0
+        ? "No image"
+        : coverage.annotatedSources === 0
+        ? "Not annotated"
+        : coverage.annotatedSources === imgCount
+        ? `Annotated ${coverage.annotatedSources}/${imgCount}`
+        : `Partial ${coverage.annotatedSources}/${imgCount}`;
+      const coverageTone = coverage.state === "full" ? "is-full" : coverage.state === "none" ? "is-none" : "is-partial";
       const deleteBtn = isAdminUser()
-        ? `<button class="btn btn-danger btn-small" type="button" data-delete-submission-id="${row.id}" title="管理员删除该提交记录">删除提交</button>`
+        ? `<button class="btn btn-danger btn-small" type="button" data-delete-submission-id="${row.id}" title="Delete this submission">Delete</button>`
         : "";
 
       fold.innerHTML = `
         <summary class="submission-fold-summary">
-          <span><strong>${escapeHtml(displayName(row.student_id))}</strong> · ${MODULE_LABELS[row.module] ?? row.module}</span>
+          <div class="submission-fold-main">
+            <span><strong>${escapeHtml(displayName(row.student_id))}</strong> · ${MODULE_LABELS[row.module] ?? row.module}</span>
+            <div class="submission-fold-pills">
+              <span class="submission-mini-pill">Images ${imgCount}</span>
+              <span class="submission-mini-pill ${coverageTone}">${escapeHtml(coverageText)}</span>
+              ${renderTodayBadge(row.study_date)}
+            </div>
+          </div>
           <span class="status-chip ${statusClass(row.review_status)}">${STATUS_LABELS[row.review_status] ?? row.review_status}</span>
         </summary>
         <div class="submission-fold-body">
-          <p class="submission-meta">图片 ${imgCount} · 批注图 ${annCount}</p>
+          <p class="submission-meta">${imgCount > 0 ? `Annotated sources ${coverage.annotatedSources}/${imgCount}` : "No image to annotate"} · Mark files ${coverage.totalAnnotations}</p>
           <p class="submission-content">${escapeHtml(snippet)}</p>
           ${renderImageThumbs(row.image_urls ?? [], true)}
           <div class="inline-actions">
-            <button class="btn btn-ghost" type="button" data-review-id="${row.id}" title="选中这条提交并在右侧批改">选中并批改</button>
+            <button class="btn btn-ghost" type="button" data-review-id="${row.id}" title="Open this submission in the workbench">Open</button>
             ${deleteBtn}
           </div>
         </div>
@@ -5848,7 +6116,7 @@ function renderTeacherSavedReviewList() {
   holder.innerHTML = "";
 
   if (!submissionCache.length || teacherReviewMap.size === 0) {
-    holder.innerHTML = "<p class=\"muted\">暂无已提交批改记录。</p>";
+    holder.innerHTML = `<p class="muted">No saved reviews yet.</p>`;
     return;
   }
 
@@ -5871,7 +6139,7 @@ function renderTeacherSavedReviewList() {
     });
 
   if (!rows.length) {
-    holder.innerHTML = "<p class=\"muted\">当前筛选下暂无已提交批改。</p>";
+    holder.innerHTML = `<p class="muted">Nothing saved under this filter.</p>`;
     return;
   }
 
@@ -5882,22 +6150,31 @@ function renderTeacherSavedReviewList() {
     const status = review.status || submission.review_status || "pending";
     const score = Number.isFinite(Number(review.score)) ? Number(review.score) : "-";
     const snippet = String(review.comment || "").trim().slice(0, 120);
+    const isToday = isTodayDate(submission.study_date);
 
     const item = document.createElement("article");
     item.className = "translation-attempt-card";
     if (submission.id === selectedSubmissionId) {
       item.classList.add("active");
     }
+    if (isToday) {
+      item.classList.add("is-today");
+    }
     item.innerHTML = `
       <div class="translation-attempt-head">
-        <strong>${escapeHtml(displayName(submission.student_id))}</strong>
-        <span class="status-chip ${statusClass(status)}">${STATUS_LABELS[status] ?? status}</span>
+        <div>
+          <strong>${escapeHtml(displayName(submission.student_id))}</strong>
+          <p class="translation-attempt-meta">${escapeHtml(submission.study_date)} · ${escapeHtml(MODULE_LABELS[submission.module] ?? submission.module)} · Score ${escapeHtml(String(score))}</p>
+        </div>
+        <div class="inline-actions">
+          ${renderTodayBadge(submission.study_date)}
+          <span class="status-chip ${statusClass(status)}">${STATUS_LABELS[status] ?? status}</span>
+        </div>
       </div>
-      <p class="translation-attempt-meta">${escapeHtml(submission.study_date)} · ${escapeHtml(MODULE_LABELS[submission.module] ?? submission.module)} · 分数 ${escapeHtml(String(score))}</p>
-      <p class="translation-attempt-snippet">${escapeHtml(snippet || "（无评语）")}</p>
+      <p class="translation-attempt-snippet">${escapeHtml(snippet || "(No comment)")}</p>
       <div class="inline-actions">
-        <span class="muted">已提交时间：${escapeHtml(savedTime)}</span>
-        <button class="btn btn-ghost btn-small" type="button" data-saved-review-id="${submission.id}" title="回到这条已提交批改">查看</button>
+        <span class="muted">Saved at: ${escapeHtml(savedTime)}</span>
+        <button class="btn btn-ghost btn-small" type="button" data-saved-review-id="${submission.id}" title="Return to this saved review">Open</button>
       </div>
     `;
     holder.appendChild(item);
@@ -5911,10 +6188,12 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
 
   const item = submissionCache.find((x) => x.id === submissionId);
   if (!item) {
+    clearReviewEditor();
     return;
   }
 
-  ui["review-target"].textContent = `当前批改: ${displayName(item.student_id)} · ${item.study_date} · ${MODULE_LABELS[item.module] ?? item.module}`;
+  ui["review-target"].textContent = `Current: ${displayName(item.student_id)} · ${item.study_date} · ${MODULE_LABELS[item.module] ?? item.module}`;
+  ui["review-selection-stats"].innerHTML = buildReviewSelectionStatsMarkup(item);
   ui["review-images"].innerHTML = renderReviewImageActions(item.image_urls ?? [], submissionId);
   renderReviewAnnotations(submissionId);
 
@@ -5931,10 +6210,9 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
       ui["review-score"].value = cachedReview.score ?? 80;
       ui["review-comment"].value = cachedReview.comment ?? "";
     }
-    ui["review-last-saved"].textContent =
-      `最近提交：${formatDateTime(cachedReview.updated_at || cachedReview.created_at)}`;
+    ui["review-last-saved"].textContent = `Last saved: ${formatDateTime(cachedReview.updated_at || cachedReview.created_at)}`;
   } else {
-    ui["review-last-saved"].textContent = "最近提交：-";
+    ui["review-last-saved"].textContent = "Last saved: -";
   }
 
   const { data, error } = await supabase
@@ -5944,7 +6222,7 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
     .maybeSingle();
 
   if (error) {
-    showAlert(`读取历史批改失败: ${error.message}`, "error");
+    showAlert(`Failed to load review history: ${error.message}`, "error");
     restoreReviewDraftForSelection();
     return;
   }
@@ -5956,45 +6234,64 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
       ui["review-score"].value = data.score ?? 80;
       ui["review-comment"].value = data.comment ?? "";
     }
-    ui["review-last-saved"].textContent = `最近提交：${formatDateTime(data.updated_at || data.created_at)}`;
+    ui["review-last-saved"].textContent = `Last saved: ${formatDateTime(data.updated_at || data.created_at)}`;
     renderTeacherSavedReviewList();
   }
 
+  ui["review-selection-stats"].innerHTML = buildReviewSelectionStatsMarkup(item);
   restoreReviewDraftForSelection();
 }
 
 function renderReviewImageActions(urls, submissionId) {
   if (!urls.length) {
-    return "<span class=\"muted\">该提交没有图片</span>";
+    return renderReviewPlaceholder("No image on this submission.");
   }
 
-  return urls
-    .map((url) => {
+  const sourceMap = getAnnotationSourceMap(submissionId);
+  return `<div class="review-source-grid">${urls
+    .map((url, index) => {
       const safe = escapeAttr(url);
       const encoded = encodeURIComponent(url);
-      return `<div class="thumb-edit">
-        <img class="thumb-img" src="${safe}" alt="source" />
-        <div class="thumb-tool-row">
-          <button
-            type="button"
-            class="btn btn-ghost btn-small annot-btn"
-            data-open-preview="1"
-            data-submission-id="${submissionId}"
-            data-source-url="${encoded}"
-            title="打开大图预览"
-          >预览</button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-small annot-btn"
-            data-open-annot="1"
-            data-submission-id="${submissionId}"
-            data-source-url="${encoded}"
-            title="打开圈画批注"
-          >圈画</button>
+      const related = sourceMap.get(url) ?? [];
+      const label = `Image ${index + 1}`;
+      const statusLabel = related.length ? `Marked ${related.length}` : "Pending";
+      const noteText = related.length
+        ? summarizeText(related.map((item) => item.note).filter(Boolean).join("; "), 48) || "Already marked. You can continue editing."
+        : "No mark yet. Open the annotator directly.";
+      return `<article class="review-source-card ${related.length ? "is-annotated" : "is-pending"}">
+        <div class="review-source-media">
+          <img class="review-source-img" src="${safe}" alt="${escapeAttr(label)}" />
+          <span class="review-source-index">${label}</span>
+          <span class="review-source-state ${related.length ? "done" : "pending"}">${statusLabel}</span>
         </div>
-      </div>`;
+        <div class="review-source-body">
+          <div class="review-source-meta">
+            <strong>${label}</strong>
+            <span>${related.length ? "continue marking" : "ready to mark"}</span>
+          </div>
+          <p class="review-source-note">${escapeHtml(noteText)}</p>
+          <div class="thumb-tool-row review-source-actions">
+            <button
+              type="button"
+              class="btn btn-ghost btn-small annot-btn"
+              data-open-preview="1"
+              data-submission-id="${submissionId}"
+              data-source-url="${encoded}"
+              title="Open large preview"
+            >Preview</button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-small annot-btn"
+              data-open-annot="1"
+              data-submission-id="${submissionId}"
+              data-source-url="${encoded}"
+              title="Open the annotator"
+            >${related.length ? "Annotate More" : "Annotate"}</button>
+          </div>
+        </div>
+      </article>`;
     })
-    .join("");
+    .join("")}</div>`;
 }
 
 function renderReviewAnnotations(submissionId) {
@@ -6002,7 +6299,7 @@ function renderReviewAnnotations(submissionId) {
   const list = annotationMapBySubmission.get(submissionId) ?? [];
 
   if (!list.length) {
-    holder.innerHTML = "<span class=\"muted\">暂无图片批注</span>";
+    holder.innerHTML = renderReviewPlaceholder("Saved annotation files will appear here.");
     return;
   }
 
@@ -6014,13 +6311,14 @@ function renderReviewAnnotations(submissionId) {
 
 function clearReviewEditor() {
   selectedSubmissionId = null;
-  ui["review-target"].textContent = "当前未选择提交";
-  ui["review-images"].innerHTML = "";
-  ui["review-annotations"].innerHTML = "";
+  ui["review-target"].textContent = "No submission selected";
+  ui["review-selection-stats"].innerHTML = `<span class="teacher-review-empty-pill">Select one item on the left</span>`;
+  ui["review-images"].innerHTML = renderReviewPlaceholder("Choose a submission to see image status here.");
+  ui["review-annotations"].innerHTML = renderReviewPlaceholder("Saved annotation files will appear here.");
   ui["review-status"].value = "pending";
   ui["review-score"].value = 80;
   ui["review-comment"].value = "";
-  ui["review-last-saved"].textContent = "最近提交：-";
+  ui["review-last-saved"].textContent = "Last saved: -";
   updateReviewDraftState(null);
 }
 
@@ -6394,7 +6692,7 @@ async function reopenAnnotationForEdit(submissionId, annotationId) {
 
 async function openAnnotationModal(submissionId, sourceImageUrl, editOptions = null) {
   if (currentProfile.role !== "teacher" && currentProfile.role !== "teammate") {
-    showAlert("仅老师可进行图片批注。", "error");
+    showAlert("Only reviewers can annotate images.", "error");
     return;
   }
 
@@ -6410,6 +6708,7 @@ async function openAnnotationModal(submissionId, sourceImageUrl, editOptions = n
     const scale = Math.min(1, maxW / image.width, maxH / image.height);
     const width = Math.max(1, Math.floor(image.width * scale));
     const height = Math.max(1, Math.floor(image.height * scale));
+    const sourceLabel = describeSubmissionSourceImage(submissionId, sourceImageUrl, "Image");
 
     canvas.width = width;
     canvas.height = height;
@@ -6426,15 +6725,16 @@ async function openAnnotationModal(submissionId, sourceImageUrl, editOptions = n
     annotState.history = [canvas.toDataURL("image/png")];
 
     ui["annot-note"].value = isEdit ? String(editOptions.note || "") : "";
-    ui["annot-modal-title"].textContent = isEdit ? "图片圈画批注（再编辑）" : "图片圈画批注";
+    ui["annot-context"].textContent = buildAnnotationContextText(submissionId, sourceImageUrl);
+    ui["annot-modal-title"].textContent = isEdit ? `Annotate · ${sourceLabel} · Edit` : `Annotate · ${sourceLabel}`;
     ui["annot-modal-tip"].textContent = isEdit
-      ? "当前是再编辑模式：会覆盖这条批注，学生端将看到更新后的版本。"
-      : "支持鼠标或手指绘制，保存后学生端可见。";
-    ui["annot-save-btn"].textContent = isEdit ? "更新批注图" : "保存批注图";
-    ui["annot-save-btn"].title = isEdit ? "覆盖当前批注并同步给学生" : "保存圈画批注并同步给学生";
+      ? "Edit mode overwrites the current annotation and keeps you in the same workbench item."
+      : "Draw and save here. After saving, you stay on the same selected submission.";
+    ui["annot-save-btn"].textContent = isEdit ? "Update" : "Save";
+    ui["annot-save-btn"].title = isEdit ? "Overwrite this annotation" : "Save this annotation";
     ui["annot-modal"].classList.remove("hidden");
   } catch (error) {
-    showAlert(`打开批注画布失败: ${error.message}`, "error");
+    showAlert(`Failed to open annotator: ${error.message}`, "error");
   }
 }
 
@@ -6447,10 +6747,11 @@ function closeAnnotationModal() {
   annotState.drawing = false;
   annotState.moved = false;
   annotState.history = [];
-  ui["annot-modal-title"].textContent = "图片圈画批注";
-  ui["annot-modal-tip"].textContent = "支持鼠标或手指绘制，保存后学生端可见。";
-  ui["annot-save-btn"].textContent = "保存批注图";
-  ui["annot-save-btn"].title = "保存圈画批注并同步给学生";
+  ui["annot-context"].textContent = "No image locked";
+  ui["annot-modal-title"].textContent = "Image Annotation";
+  ui["annot-modal-tip"].textContent = "Draw and save here. After saving, you stay on the same selected submission.";
+  ui["annot-save-btn"].textContent = "Save";
+  ui["annot-save-btn"].title = "Save this annotation";
   ui["annot-modal"].classList.add("hidden");
 }
 
@@ -6545,18 +6846,18 @@ async function restoreCanvasSnapshot(dataUrl) {
 
 async function saveAnnotationImage() {
   if (!annotState.open || !annotState.submissionId || !annotState.sourceImageUrl) {
-    showAlert("当前没有可保存的图片批注。", "error", 4600, true);
+    showAlert("There is no image ready to save.", "error", 4600, true);
     return;
   }
 
-  await withButtonBusy(ui["annot-save-btn"], "保存中...", async () => {
+  await withButtonBusy(ui["annot-save-btn"], "Saving...", async () => {
     const canvas = ui["annot-canvas"];
     const submissionId = annotState.submissionId;
     const sourceImageUrl = annotState.sourceImageUrl;
     const editingAnnotationId = annotState.annotationId;
     const previousAnnotatedPath = annotState.originalAnnotatedPath;
     const isEdit = Boolean(editingAnnotationId);
-    showAlert("正在保存批注（1/3 生成图片）...", "info", 1800, true);
+    showAlert("Saving annotation (1/3 create image)...", "info", 1800, true);
     let contentType = "image/jpeg";
     let ext = "jpg";
     let blob = await canvasToBlob(canvas, contentType, ANNOT_JPEG_QUALITY);
@@ -6567,17 +6868,17 @@ async function saveAnnotationImage() {
     }
 
     if (!blob || blob.size <= 0) {
-      throw new Error("生成批注图失败");
+      throw new Error("Failed to create the annotated image.");
     }
 
     const stamp = Date.now();
     const path = `${currentSession.user.id}/${submissionId}/${stamp}_annot.${ext}`;
-    showAlert("正在保存批注（2/3 上传图片）...", "info", 1800, true);
+    showAlert("Saving annotation (2/3 upload file)...", "info", 1800, true);
     await uploadAnnotationBlobWithRetry(path, blob, contentType);
 
     const { data } = supabase.storage.from(ANNOT_BUCKET).getPublicUrl(path);
     const note = ui["annot-note"].value.trim();
-    const insertPayload = {
+    const payload = {
       submission_id: submissionId,
       teacher_id: currentSession.user.id,
       source_image_url: sourceImageUrl,
@@ -6585,106 +6886,93 @@ async function saveAnnotationImage() {
       note,
     };
 
-    showAlert("正在保存批注（3/3 写入记录）...", "info", 1800, true);
-    const writeResp = await runWithRetry(
-      () =>
-        withTimeout(
-          isEdit
-            ? supabase
-                .from("image_annotations")
-                .update({
-                  source_image_url: sourceImageUrl,
-                  annotated_image_url: data.publicUrl,
-                  note,
-                })
-                .eq("id", editingAnnotationId)
-                .select("*")
-                .maybeSingle()
-            : supabase
-                .from("image_annotations")
-                .insert(insertPayload)
-                .select("*")
-                .maybeSingle(),
-          22000,
-          isEdit ? "更新批注记录超时" : "写入批注记录超时"
-        ),
-      {
-        retries: UPSERT_MAX_RETRY,
-        baseDelayMs: 680,
-        shouldRetry: (error) => isRetryableError(error),
-      }
-    );
-    const savedRow = writeResp?.data ?? null;
-    const writeErr = writeResp?.error ?? null;
-
-    if (writeErr) {
-      await supabase.storage.from(ANNOT_BUCKET).remove([path]);
-      throw writeErr;
+    showAlert("Saving annotation (3/3 write record)...", "info", 1800, true);
+    const writeResult = await saveAnnotationRecordWithVerification(payload, {
+      annotationId: editingAnnotationId,
+    });
+    if (writeResult.error) {
+      throw writeResult.error;
     }
 
-    const localRow = savedRow || {
-      ...insertPayload,
+    const savedRow = writeResult.data || {
+      ...payload,
       id: editingAnnotationId || `local_${stamp}`,
       created_at: new Date().toISOString(),
     };
     const prev = annotationMapBySubmission.get(submissionId) ?? [];
     if (isEdit) {
-      const next = prev.map((item) => (item.id === editingAnnotationId ? { ...item, ...localRow } : item));
+      const next = prev.map((item) => (item.id === editingAnnotationId ? { ...item, ...savedRow } : item));
       const found = next.some((item) => item.id === editingAnnotationId);
-      annotationMapBySubmission.set(submissionId, found ? next : [localRow, ...next]);
+      annotationMapBySubmission.set(submissionId, found ? next : [savedRow, ...next]);
       if (previousAnnotatedPath && previousAnnotatedPath !== path) {
         void supabase.storage.from(ANNOT_BUCKET).remove([previousAnnotatedPath]);
       }
     } else {
-      annotationMapBySubmission.set(submissionId, [localRow, ...prev]);
+      annotationMapBySubmission.set(submissionId, [savedRow, ...prev]);
     }
+
     renderTeacherSubmissionList();
-    if (selectedSubmissionId === submissionId) {
+    renderTeacherSavedReviewList();
+    const selectedRow = findSubmissionRecord(submissionId);
+    if (selectedSubmissionId === submissionId && selectedRow) {
+      ui["review-images"].innerHTML = renderReviewImageActions(selectedRow.image_urls ?? [], submissionId);
       renderReviewAnnotations(submissionId);
+      ui["review-selection-stats"].innerHTML = buildReviewSelectionStatsMarkup(selectedRow);
     }
 
     closeAnnotationModal();
-    showAlert(isEdit ? "图片批注已更新。" : "图片批注保存成功。", "info", 3200, true);
+    showAlert(
+      writeResult.recovered
+        ? (isEdit ? "Annotation updated. The record was verified after a slow response." : "Annotation saved. The record was verified after a slow response.")
+        : (isEdit ? "Annotation updated." : "Annotation saved."),
+      "info",
+      3200,
+      true
+    );
 
-    // Keep UX responsive: reconcile with server in background.
     void loadTeacherData(true);
   }).catch((error) => {
-    showAlert(`保存图片批注失败: ${error.message}`, "error", 6500, true);
+    showAlert(`Failed to save annotation: ${error.message}`, "error", 6500, true);
   });
 }
 
 function renderAnnotationThumbs(rows, compact = false, options = {}) {
   if (!rows.length) {
-    return "<span class=\"muted\">无</span>";
+    return renderReviewPlaceholder("No annotation files yet.");
   }
 
   const editable = Boolean(options.editable) && !compact;
   const submissionId = String(options.submissionId || "");
   const limit = compact ? 3 : rows.length;
   const picked = rows.slice(0, limit);
-  const more = rows.length > limit ? `<span class=\"more-badge\">+${rows.length - limit}</span>` : "";
+  const more = rows.length > limit ? `<span class="more-badge">+${rows.length - limit}</span>` : "";
 
   const html = picked
     .map((row, idx) => {
       const safe = escapeAttr(row.annotated_image_url);
-      const title = escapeAttr(row.note || `批注图 ${idx + 1}`);
-      const note = row.note ? `<span class="annot-note">${escapeHtml(row.note)}</span>` : "";
+      const sourceLabel = describeSubmissionSourceImage(submissionId, row.source_image_url, `Image ${idx + 1}`);
+      const title = escapeAttr(row.note || sourceLabel);
+      const note = row.note
+        ? `<span class="annot-note">${escapeHtml(row.note)}</span>`
+        : `<span class="annot-note muted">No note</span>`;
       const canEdit = editable && row.id && !String(row.id).startsWith("local_");
-      const editBtn =
-        canEdit
-          ? `<button class="btn btn-ghost btn-small annot-edit-btn" type="button" data-edit-annot-id="${row.id}" data-submission-id="${submissionId}" title="基于这张批注继续修改">再编辑</button>`
-          : "";
-      return `<span class="annot-item">
+      const editBtn = canEdit
+        ? `<button class="btn btn-ghost btn-small annot-edit-btn" type="button" data-edit-annot-id="${row.id}" data-submission-id="${submissionId}" title="Edit this annotation">Edit</button>`
+        : "";
+      return `<article class="annot-item">
         <a href="${safe}" target="_blank" rel="noreferrer" title="${title}">
           <img class="thumb-img" src="${safe}" alt="annot-${idx + 1}" />
         </a>
-        ${compact ? "" : note}
+        <div class="annot-note-stack">
+          <span class="annot-source-tag">${escapeHtml(sourceLabel)}</span>
+          ${compact ? "" : note}
+        </div>
         ${editBtn}
-      </span>`;
+      </article>`;
     })
     .join("");
 
-  return `<div class=\"thumb-row\">${html}${more}</div>`;
+  return `<div class="review-annotation-grid">${html}${more}</div>`;
 }
 
 function renderImageThumbs(urls, compact = false) {
