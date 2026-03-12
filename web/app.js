@@ -6080,7 +6080,7 @@ function renderTeacherSubmissionList() {
 
       const coverage = getAnnotationCoverage(row.id, row.image_urls ?? []);
       const imgCount = coverage.totalImages;
-      const snippet = row.content.length > 200 ? `${row.content.slice(0, 200)}...` : row.content;
+      const snippet = summarizeText(row.content, 200) || "No text content.";
       const coverageText = imgCount === 0
         ? "No image"
         : coverage.annotatedSources === 0
@@ -6623,7 +6623,7 @@ function renderTeacherReflectionList() {
       card.classList.add("active");
     }
 
-    const snippet = row.content.length > 180 ? `${row.content.slice(0, 180)}...` : row.content;
+    const snippet = summarizeText(row.content, 180) || "No reflection content.";
     card.innerHTML = `
       <div class="submission-head">
         <strong>${escapeHtml(displayName(row.student_id))}</strong>
@@ -7228,7 +7228,7 @@ function renderTeacherSubmissionList() {
 
       const coverage = getAnnotationCoverage(row.id, row.image_urls ?? []);
       const imgCount = coverage.totalImages;
-      const snippet = row.content.length > 200 ? `${row.content.slice(0, 200)}...` : row.content;
+      const snippet = summarizeText(row.content, 200) || "No text content.";
       const coverageText = imgCount === 0
         ? "无图片"
         : coverage.annotatedSources === 0
