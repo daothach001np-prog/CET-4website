@@ -636,23 +636,24 @@ h3 {
 }
 
 .calendar-weekday {
-  padding: 0.22rem 0.1rem;
+  padding: 0.18rem 0.08rem;
   text-align: center;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-family: "IBM Plex Mono", monospace;
   color: var(--ink-soft);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .calendar-cell {
-  min-height: 88px;
+  min-height: 96px;
   border: 1px solid #dfccb7;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.76);
-  padding: 0.48rem;
+  padding: 0.46rem 0.44rem 0.42rem;
   display: flex;
   flex-direction: column;
-  gap: 0.42rem;
+  justify-content: space-between;
+  gap: 0.28rem;
   position: relative;
   text-align: left;
   font: inherit;
@@ -707,12 +708,14 @@ h3 {
 }
 
 .calendar-cell-submissions {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
   color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .calendar-mark {
-  margin-top: auto;
+  margin-top: 0.15rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -720,6 +723,12 @@ h3 {
   height: 26px;
   border-radius: 999px;
   position: relative;
+}
+
+.calendar-mark.is-empty {
+  border: 1px dashed rgba(84, 74, 62, 0.18);
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 0.46;
 }
 
 .calendar-mark.kind-ring {
@@ -761,16 +770,21 @@ h3 {
 }
 
 .calendar-count-badge {
-  margin-top: auto;
-  align-self: flex-end;
+  position: absolute;
+  top: 0.46rem;
+  right: 0.46rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 22px;
   height: 22px;
-  border-radius: 8px;
+  padding: 0 0.34rem;
+  border-radius: 999px;
   border: 1px solid rgba(33, 107, 97, 0.22);
   background: rgba(33, 107, 97, 0.08);
   color: #216b61;
-  font-size: 0.74rem;
-  line-height: 20px;
+  font-size: 0.72rem;
+  line-height: 1;
   text-align: center;
 }
 
@@ -1966,20 +1980,43 @@ th {
   margin-top: 0.7rem;
 }
 
+.annot-stage-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.annot-zoom-label {
+  min-width: 64px;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 154, 138, 0.22);
+  background: rgba(31, 154, 138, 0.08);
+  color: #166d62;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  text-align: center;
+}
+
 .annot-canvas-wrap {
   border: 1px solid #d8c5ad;
-  border-radius: 10px;
+  border-radius: 18px;
   overflow: auto;
-  background: #fff;
-  padding: 0.3rem;
+  background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(245, 255, 252, 0.94));
+  padding: 0.72rem;
 }
 
 #annot-canvas {
   display: block;
   margin: 0 auto;
-  max-width: 100%;
+  max-width: none;
   touch-action: none;
   cursor: crosshair;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 34px rgba(52, 37, 21, 0.18);
+  transition: width 140ms ease, height 140ms ease, box-shadow 140ms ease;
 }
 
 .submission-content {
@@ -2164,6 +2201,9 @@ th {
 .review-image-board,
 .review-annotation-board {
   min-height: 160px;
+  max-height: min(58vh, 760px);
+  overflow: auto;
+  padding-right: 0.18rem;
 }
 
 .teacher-review-placeholder {
@@ -2181,8 +2221,8 @@ th {
 
 .review-source-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 0.85rem;
 }
 
 .review-source-card {
@@ -2191,6 +2231,7 @@ th {
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.84);
   overflow: hidden;
+  box-shadow: 0 16px 28px rgba(65, 45, 21, 0.08);
 }
 
 .review-source-card.is-annotated {
@@ -2211,7 +2252,7 @@ th {
 
 .review-source-img {
   width: 100%;
-  height: 168px;
+  height: clamp(148px, 20vw, 188px);
   object-fit: cover;
   border-radius: 16px;
   border: 1px solid #d8c4af;
@@ -2269,13 +2310,12 @@ th {
 .review-source-meta span {
   font-size: 0.76rem;
   color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .review-source-note {
   margin: 0;
-  min-height: 3.2em;
+  min-height: 0;
   color: #5b4638;
   font-size: 0.84rem;
   line-height: 1.6;
@@ -2283,12 +2323,19 @@ th {
 
 .review-source-actions {
   margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.review-source-actions .btn {
+  flex: 1 1 120px;
 }
 
 .review-annotation-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.8rem;
   align-items: start;
 }
 
@@ -2448,20 +2495,19 @@ th {
 .annot-modal-layout {
   margin-top: 0.75rem;
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
-  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1.72fr) minmax(300px, 0.72fr);
+  gap: 1rem;
 }
 
 .annot-stage-panel {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.8rem;
 }
 
 .annot-stage-panel .annot-canvas-wrap {
-  min-height: min(62vh, 640px);
+  min-height: min(66vh, 700px);
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(245, 255, 252, 0.94));
 }
 
 .annot-side-panel {
@@ -2621,24 +2667,25 @@ th {
   }
 
   .calendar-cell {
-    min-height: 82px;
-    padding: 0.4rem 0.32rem;
+    min-height: 78px;
+    padding: 0.38rem 0.3rem;
     border-radius: 12px;
   }
 
   .calendar-cell-submissions {
-    font-size: 0.68rem;
+    font-size: 0.64rem;
   }
 
   .calendar-cell-day {
-    font-size: 0.86rem;
+    font-size: 0.82rem;
   }
 
   .calendar-count-badge {
+    top: 0.34rem;
+    right: 0.34rem;
     min-width: 18px;
     height: 18px;
-    line-height: 16px;
-    font-size: 0.68rem;
+    font-size: 0.64rem;
   }
 
   .nav-panel {

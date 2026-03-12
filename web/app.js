@@ -117,8 +117,8 @@ const previewState = {
   open: false,
   submissionId: null,
   sourceUrl: "",
-  title: "作业图片预览",
-  tip: "旋转、翻转和缩放只影响当前预览，不会改动原图。",
+  title: "图片预览",
+  tip: "这里支持放大、旋转和翻转，仅影响当前预览，不会修改原图。",
   allowAnnotate: false,
   enableTransforms: false,
   rotation: 0,
@@ -138,6 +138,7 @@ const annotState = {
   lastX: 0,
   lastY: 0,
   history: [],
+  zoom: 1,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -393,6 +394,14 @@ function cacheUi() {
     "annot-close-btn",
     "annot-canvas",
     "annot-note",
+    "annot-zoom-out-btn",
+    "annot-zoom-in-btn",
+    "annot-rotate-left-btn",
+    "annot-rotate-right-btn",
+    "annot-flip-x-btn",
+    "annot-flip-y-btn",
+    "annot-fit-btn",
+    "annot-zoom-label",
     "annot-undo-btn",
     "annot-clear-btn",
     "annot-save-btn",
@@ -645,9 +654,9 @@ function bindEvents() {
         const sourceUrl = decodeURIComponent(source);
         openImagePreview(submissionId, sourceUrl, {
           allowAnnotate: true,
-          enableTransforms: false,
+          enableTransforms: true,
           title: buildSourcePreviewTitle(submissionId, sourceUrl),
-          tip: "Preview is zoom-only here. Use Annotate to mark directly.",
+          tip: "这里支持先看大图、旋转翻转，再进入批注工作台。",
         });
       }
       return;
@@ -773,6 +782,13 @@ function bindEvents() {
   ui["save-reflection-comment-btn"].addEventListener("click", () => void saveReflectionComment());
 
   ui["annot-close-btn"].addEventListener("click", closeAnnotationModal);
+  ui["annot-zoom-out-btn"].addEventListener("click", () => adjustAnnotZoom(-0.15));
+  ui["annot-zoom-in-btn"].addEventListener("click", () => adjustAnnotZoom(0.15));
+  ui["annot-rotate-left-btn"].addEventListener("click", () => void rotateAnnotation(-90));
+  ui["annot-rotate-right-btn"].addEventListener("click", () => void rotateAnnotation(90));
+  ui["annot-flip-x-btn"].addEventListener("click", () => void flipAnnotation("x"));
+  ui["annot-flip-y-btn"].addEventListener("click", () => void flipAnnotation("y"));
+  ui["annot-fit-btn"].addEventListener("click", fitAnnotCanvas);
   ui["annot-undo-btn"].addEventListener("click", () => void undoAnnotation());
   ui["annot-clear-btn"].addEventListener("click", () => void clearAnnotation());
   ui["annot-save-btn"].addEventListener("click", () => void saveAnnotationImage());
@@ -1891,8 +1907,8 @@ async function cycleTeacherCalendarMark(markDate) {
 function openImagePreview(submissionId, sourceUrl, options = {}) {
   const row = findSubmissionRecord(submissionId);
   const defaultTitle = row
-    ? `Image Preview · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
-    : "Image Preview";
+    ? `图片预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
+    : "图片预览";
   const allowAnnotate = options.allowAnnotate ?? isReviewerProfile();
   const enableTransforms = Boolean(options.enableTransforms);
   const title = options.title || defaultTitle;
@@ -1925,13 +1941,13 @@ function closeImagePreview() {
   previewState.open = false;
   previewState.submissionId = null;
   previewState.sourceUrl = "";
-  previewState.title = "Image Preview";
+  previewState.title = "图片预览";
   previewState.tip = "Zoom-only preview. The original image never changes.";
   previewState.allowAnnotate = false;
   previewState.enableTransforms = false;
   resetImagePreviewTransform(false);
   ui["image-preview-img"].removeAttribute("src");
-  ui["image-preview-title"].textContent = "Image Preview";
+  ui["image-preview-title"].textContent = "图片预览";
   ui["image-preview-tip"].textContent = "Zoom-only preview. The original image never changes.";
   ui["image-preview-open-annot-btn"].classList.toggle("hidden", !isReviewerProfile());
   setImagePreviewToolVisibility();
@@ -5427,9 +5443,9 @@ function buildSourcePreviewTitle(submissionId, sourceImageUrl) {
   const row = findSubmissionRecord(submissionId);
   const sourceLabel = describeSubmissionSourceImage(submissionId, sourceImageUrl, "Image");
   if (!row) {
-    return `Original Preview · ${sourceLabel}`;
+    return `原图预览 · ${sourceLabel}`;
   }
-  return `Original Preview · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module} · ${sourceLabel}`;
+  return `原图预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module} · ${sourceLabel}`;
 }
 
 function buildAnnotationContextText(submissionId, sourceImageUrl) {
@@ -5496,7 +5512,7 @@ function renderTodayBadge(value, label = "Today") {
 
 function buildReviewSelectionStatsMarkup(item) {
   if (!item) {
-    return '<span class="teacher-review-empty-pill">Select one item on the left</span>';
+    return '<span class="teacher-review-empty-pill">先在左侧选择一条作业</span>';
   }
 
   const review = teacherReviewMap.get(item.id);
@@ -5891,8 +5907,8 @@ function handleStudentReviewActionClick(event) {
   openImagePreview(submissionId, decodeURIComponent(sourceUrl), {
     allowAnnotate: false,
     enableTransforms: false,
-    title: actionBtn.dataset.previewTitle || "Image Preview",
-    tip: actionBtn.dataset.previewTip || "Preview is zoom-only and does not change the original image.",
+    title: actionBtn.dataset.previewTitle || "图片预览",
+    tip: actionBtn.dataset.previewTip || "这里只提供放大预览，不会修改原图。",
   });
 }
 
@@ -6018,7 +6034,7 @@ function renderTeacherSubmissionList() {
   list.innerHTML = "";
 
   if (!submissionCache.length) {
-    list.innerHTML = `<p class="muted">No submissions match the current filter.</p>`;
+    list.innerHTML = `<p class="muted">当前筛选条件下还没有待批改作业。</p>`;
     return;
   }
 
@@ -6048,7 +6064,7 @@ function renderTeacherSubmissionList() {
     daySummary.className = "submission-day-summary";
     daySummary.innerHTML = `
       <span class="submission-day-title"><strong>${day}</strong>${renderTodayBadge(day)}</span>
-      <span class="submission-day-metrics">Passed ${passed} / Returned ${returned} / Pending ${pending}</span>
+      <span class="submission-day-metrics">通过 ${passed} / 退回 ${returned} / 待处理 ${pending}</span>
     `;
     dayWrap.appendChild(daySummary);
 
@@ -6116,7 +6132,7 @@ function renderTeacherSavedReviewList() {
   holder.innerHTML = "";
 
   if (!submissionCache.length || teacherReviewMap.size === 0) {
-    holder.innerHTML = `<p class="muted">No saved reviews yet.</p>`;
+    holder.innerHTML = `<p class="muted">还没有已保存的批改记录。</p>`;
     return;
   }
 
@@ -6139,7 +6155,7 @@ function renderTeacherSavedReviewList() {
     });
 
   if (!rows.length) {
-    holder.innerHTML = `<p class="muted">Nothing saved under this filter.</p>`;
+    holder.innerHTML = `<p class="muted">当前筛选条件下没有已保存记录。</p>`;
     return;
   }
 
@@ -6192,7 +6208,7 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
     return;
   }
 
-  ui["review-target"].textContent = `Current: ${displayName(item.student_id)} · ${item.study_date} · ${MODULE_LABELS[item.module] ?? item.module}`;
+  ui["review-target"].textContent = `当前作业：${displayName(item.student_id)} · ${item.study_date} · ${MODULE_LABELS[item.module] ?? item.module}`;
   ui["review-selection-stats"].innerHTML = buildReviewSelectionStatsMarkup(item);
   ui["review-images"].innerHTML = renderReviewImageActions(item.image_urls ?? [], submissionId);
   renderReviewAnnotations(submissionId);
@@ -6210,9 +6226,9 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
       ui["review-score"].value = cachedReview.score ?? 80;
       ui["review-comment"].value = cachedReview.comment ?? "";
     }
-    ui["review-last-saved"].textContent = `Last saved: ${formatDateTime(cachedReview.updated_at || cachedReview.created_at)}`;
+    ui["review-last-saved"].textContent = `最近保存：${formatDateTime(cachedReview.updated_at || cachedReview.created_at)}`;
   } else {
-    ui["review-last-saved"].textContent = "Last saved: -";
+    ui["review-last-saved"].textContent = "最近保存：-";
   }
 
   const { data, error } = await supabase
@@ -6234,7 +6250,7 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
       ui["review-score"].value = data.score ?? 80;
       ui["review-comment"].value = data.comment ?? "";
     }
-    ui["review-last-saved"].textContent = `Last saved: ${formatDateTime(data.updated_at || data.created_at)}`;
+    ui["review-last-saved"].textContent = `最近保存：${formatDateTime(data.updated_at || data.created_at)}`;
     renderTeacherSavedReviewList();
   }
 
@@ -6244,7 +6260,7 @@ async function selectSubmissionForReview(submissionId, keepStatus = false) {
 
 function renderReviewImageActions(urls, submissionId) {
   if (!urls.length) {
-    return renderReviewPlaceholder("No image on this submission.");
+    return renderReviewPlaceholder("这条作业没有上传图片。");
   }
 
   const sourceMap = getAnnotationSourceMap(submissionId);
@@ -6254,10 +6270,10 @@ function renderReviewImageActions(urls, submissionId) {
       const encoded = encodeURIComponent(url);
       const related = sourceMap.get(url) ?? [];
       const label = `Image ${index + 1}`;
-      const statusLabel = related.length ? `Marked ${related.length}` : "Pending";
+      const statusLabel = related.length ? `已批注 ${related.length}` : "Pending";
       const noteText = related.length
         ? summarizeText(related.map((item) => item.note).filter(Boolean).join("; "), 48) || "Already marked. You can continue editing."
-        : "No mark yet. Open the annotator directly.";
+        : "这张图还没有批注，可以直接进入批注工作台。";
       return `<article class="review-source-card ${related.length ? "is-annotated" : "is-pending"}">
         <div class="review-source-media">
           <img class="review-source-img" src="${safe}" alt="${escapeAttr(label)}" />
@@ -6267,7 +6283,7 @@ function renderReviewImageActions(urls, submissionId) {
         <div class="review-source-body">
           <div class="review-source-meta">
             <strong>${label}</strong>
-            <span>${related.length ? "continue marking" : "ready to mark"}</span>
+            <span>${related.length ? "继续批注" : "待开始"}</span>
           </div>
           <p class="review-source-note">${escapeHtml(noteText)}</p>
           <div class="thumb-tool-row review-source-actions">
@@ -6277,7 +6293,7 @@ function renderReviewImageActions(urls, submissionId) {
               data-open-preview="1"
               data-submission-id="${submissionId}"
               data-source-url="${encoded}"
-              title="Open large preview"
+              title="仅查看原图大图"
             >Preview</button>
             <button
               type="button"
@@ -6285,7 +6301,7 @@ function renderReviewImageActions(urls, submissionId) {
               data-open-annot="1"
               data-submission-id="${submissionId}"
               data-source-url="${encoded}"
-              title="Open the annotator"
+              title="进入图片批注工作台"
             >${related.length ? "Annotate More" : "Annotate"}</button>
           </div>
         </div>
@@ -6299,7 +6315,7 @@ function renderReviewAnnotations(submissionId) {
   const list = annotationMapBySubmission.get(submissionId) ?? [];
 
   if (!list.length) {
-    holder.innerHTML = renderReviewPlaceholder("Saved annotation files will appear here.");
+    holder.innerHTML = renderReviewPlaceholder("已保存的批注图会显示在这里。");
     return;
   }
 
@@ -6311,14 +6327,14 @@ function renderReviewAnnotations(submissionId) {
 
 function clearReviewEditor() {
   selectedSubmissionId = null;
-  ui["review-target"].textContent = "No submission selected";
-  ui["review-selection-stats"].innerHTML = `<span class="teacher-review-empty-pill">Select one item on the left</span>`;
+  ui["review-target"].textContent = "当前还没有选中作业";
+  ui["review-selection-stats"].innerHTML = `<span class="teacher-review-empty-pill">先在左侧选择一条作业</span>`;
   ui["review-images"].innerHTML = renderReviewPlaceholder("Choose a submission to see image status here.");
-  ui["review-annotations"].innerHTML = renderReviewPlaceholder("Saved annotation files will appear here.");
+  ui["review-annotations"].innerHTML = renderReviewPlaceholder("已保存的批注图会显示在这里。");
   ui["review-status"].value = "pending";
   ui["review-score"].value = 80;
   ui["review-comment"].value = "";
-  ui["review-last-saved"].textContent = "Last saved: -";
+  ui["review-last-saved"].textContent = "最近保存：-";
   updateReviewDraftState(null);
 }
 
@@ -6692,7 +6708,7 @@ async function reopenAnnotationForEdit(submissionId, annotationId) {
 
 async function openAnnotationModal(submissionId, sourceImageUrl, editOptions = null) {
   if (currentProfile.role !== "teacher" && currentProfile.role !== "teammate") {
-    showAlert("Only reviewers can annotate images.", "error");
+    showAlert("只有老师或互改同学可以批注图片。", "error");
     return;
   }
 
@@ -6857,7 +6873,7 @@ async function saveAnnotationImage() {
     const editingAnnotationId = annotState.annotationId;
     const previousAnnotatedPath = annotState.originalAnnotatedPath;
     const isEdit = Boolean(editingAnnotationId);
-    showAlert("Saving annotation (1/3 create image)...", "info", 1800, true);
+    showAlert("正在保存批注（1/3 生成图片）...", "info", 1800, true);
     let contentType = "image/jpeg";
     let ext = "jpg";
     let blob = await canvasToBlob(canvas, contentType, ANNOT_JPEG_QUALITY);
@@ -6873,7 +6889,7 @@ async function saveAnnotationImage() {
 
     const stamp = Date.now();
     const path = `${currentSession.user.id}/${submissionId}/${stamp}_annot.${ext}`;
-    showAlert("Saving annotation (2/3 upload file)...", "info", 1800, true);
+    showAlert("正在保存批注（2/3 上传文件）...", "info", 1800, true);
     await uploadAnnotationBlobWithRetry(path, blob, contentType);
 
     const { data } = supabase.storage.from(ANNOT_BUCKET).getPublicUrl(path);
@@ -6886,7 +6902,7 @@ async function saveAnnotationImage() {
       note,
     };
 
-    showAlert("Saving annotation (3/3 write record)...", "info", 1800, true);
+    showAlert("正在保存批注（3/3 写入记录）...", "info", 1800, true);
     const writeResult = await saveAnnotationRecordWithVerification(payload, {
       annotationId: editingAnnotationId,
     });
@@ -6923,8 +6939,8 @@ async function saveAnnotationImage() {
     closeAnnotationModal();
     showAlert(
       writeResult.recovered
-        ? (isEdit ? "Annotation updated. The record was verified after a slow response." : "Annotation saved. The record was verified after a slow response.")
-        : (isEdit ? "Annotation updated." : "Annotation saved."),
+        ? (isEdit ? "批注已更新，虽然网络较慢，但系统已经校验保存成功。" : "批注已保存，虽然网络较慢，但系统已经校验保存成功。")
+        : (isEdit ? "批注已更新。" : "批注已保存。"),
       "info",
       3200,
       true
@@ -6938,7 +6954,7 @@ async function saveAnnotationImage() {
 
 function renderAnnotationThumbs(rows, compact = false, options = {}) {
   if (!rows.length) {
-    return renderReviewPlaceholder("No annotation files yet.");
+    return renderReviewPlaceholder("还没有已保存的批注文件。");
   }
 
   const editable = Boolean(options.editable) && !compact;
@@ -6954,10 +6970,10 @@ function renderAnnotationThumbs(rows, compact = false, options = {}) {
       const title = escapeAttr(row.note || sourceLabel);
       const note = row.note
         ? `<span class="annot-note">${escapeHtml(row.note)}</span>`
-        : `<span class="annot-note muted">No note</span>`;
+        : `<span class="annot-note muted">暂无说明</span>`;
       const canEdit = editable && row.id && !String(row.id).startsWith("local_");
       const editBtn = canEdit
-        ? `<button class="btn btn-ghost btn-small annot-edit-btn" type="button" data-edit-annot-id="${row.id}" data-submission-id="${submissionId}" title="Edit this annotation">Edit</button>`
+        ? `<button class="btn btn-ghost btn-small annot-edit-btn" type="button" data-edit-annot-id="${row.id}" data-submission-id="${submissionId}" title="继续编辑这条批注">继续编辑</button>`
         : "";
       return `<article class="annot-item">
         <a href="${safe}" target="_blank" rel="noreferrer" title="${title}">
@@ -6975,6 +6991,861 @@ function renderAnnotationThumbs(rows, compact = false, options = {}) {
   return `<div class="review-annotation-grid">${html}${more}</div>`;
 }
 
+function renderTodayBadge(value, label = "今天") {
+  if (!isTodayDate(value)) {
+    return "";
+  }
+  return `<span class="today-badge">${escapeHtml(label)}</span>`;
+}
+function renderCalendarGrid(holder, monthDate, marks, countMap, options = {}) {
+  if (!holder) {
+    return;
+  }
+
+  if (!calendarFeatureReady) {
+    holder.innerHTML = `<p class="muted">日历数据表还没准备好，请先完成数据库初始化。</p>`;
+    return;
+  }
+
+  const editable = Boolean(options.editable);
+  const filterable = Boolean(options.filterable);
+  const selectedDate = String(options.selectedDate || "");
+  const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
+  const markMap = new Map((marks ?? []).map((row) => [row.mark_date, row]));
+  const cells = buildCalendarCells(monthDate);
+  const today = toIsoDate(new Date());
+
+  holder.innerHTML = [
+    ...weekdays.map((day) => `<div class="calendar-weekday">${day}</div>`),
+    ...cells.map((cell) => {
+      if (!cell.iso) {
+        return `<div class="calendar-cell is-empty" aria-hidden="true"></div>`;
+      }
+      const row = markMap.get(cell.iso);
+      const kind = normalizeCalendarMarkKind(row?.kind);
+      const count = countMap?.get(cell.iso) || 0;
+      const classes = [
+        "calendar-cell",
+        cell.iso === today ? "is-today" : "",
+        editable || filterable ? "is-clickable" : "",
+        filterable && selectedDate === cell.iso ? "is-filtered" : "",
+      ].filter(Boolean).join(" ");
+      const markHtml = kind === "none"
+        ? `<span class="calendar-mark is-empty"></span>`
+        : `<span class="calendar-mark kind-${kind}" title="${CALENDAR_MARK_LABELS[kind] ?? kind}"></span>`;
+      const countHtml = count > 0 ? `<span class="calendar-count-badge">${count}</span>` : "";
+      const todayHtml = cell.iso === today ? `<span class="calendar-today-pill">今天</span>` : "";
+      const inner = `
+        <span class="calendar-cell-head">
+          <span class="calendar-cell-day-wrap">
+            <span class="calendar-cell-day">${cell.day}</span>
+            ${todayHtml}
+          </span>
+          <span class="calendar-cell-submissions">${count > 0 ? `已交 ${count} 项` : "未提交"}</span>
+        </span>
+        ${markHtml}
+        ${countHtml}
+      `;
+      if (editable) {
+        return `<button class="${classes}" type="button" data-calendar-date="${cell.iso}" title="切换老师日历标记">${inner}</button>`;
+      }
+      if (filterable) {
+        return `<button class="${classes}" type="button" data-history-date="${cell.iso}" title="${selectedDate === cell.iso ? "清除日期筛选" : `按 ${cell.iso} 筛选`}">${inner}</button>`;
+      }
+      return `<article class="${classes}">${inner}</article>`;
+    }),
+  ].join("");
+}
+
+function openImagePreview(submissionId, sourceUrl, options = {}) {
+  const row = findSubmissionRecord(submissionId);
+  const defaultTitle = row
+    ? `图片预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module}`
+    : "图片预览";
+  const allowAnnotate = options.allowAnnotate ?? isReviewerProfile();
+  const enableTransforms = Boolean(options.enableTransforms);
+  const title = options.title || defaultTitle;
+  const tip = options.tip || (enableTransforms
+    ? "这里的旋转和翻转只影响当前预览。"
+    : "这里只提供放大预览，不会修改原图。");
+
+  previewState.open = true;
+  previewState.submissionId = submissionId;
+  previewState.sourceUrl = sourceUrl;
+  previewState.title = title;
+  previewState.tip = tip;
+  previewState.allowAnnotate = allowAnnotate;
+  previewState.enableTransforms = enableTransforms;
+  previewState.rotation = 0;
+  previewState.scale = 1;
+  previewState.flipX = 1;
+  previewState.flipY = 1;
+
+  ui["image-preview-img"].src = sourceUrl;
+  ui["image-preview-title"].textContent = title;
+  ui["image-preview-tip"].textContent = tip;
+  ui["image-preview-open-annot-btn"].classList.toggle("hidden", !allowAnnotate);
+  setImagePreviewToolVisibility();
+  ui["image-preview-modal"].classList.remove("hidden");
+  applyImagePreviewTransform();
+}
+
+function closeImagePreview() {
+  previewState.open = false;
+  previewState.submissionId = null;
+  previewState.sourceUrl = "";
+  previewState.title = "图片预览";
+  previewState.tip = "这里只提供放大预览，不会修改原图。";
+  previewState.allowAnnotate = false;
+  previewState.enableTransforms = false;
+  resetImagePreviewTransform(false);
+  ui["image-preview-img"].removeAttribute("src");
+  ui["image-preview-title"].textContent = "图片预览";
+  ui["image-preview-tip"].textContent = "这里只提供放大预览，不会修改原图。";
+  ui["image-preview-open-annot-btn"].classList.toggle("hidden", !isReviewerProfile());
+  setImagePreviewToolVisibility();
+  ui["image-preview-modal"].classList.add("hidden");
+}
+
+function openCurrentPreviewInAnnotator() {
+  if (!previewState.open || !previewState.submissionId || !previewState.sourceUrl || !previewState.allowAnnotate || !isReviewerProfile()) {
+    return;
+  }
+  const submissionId = previewState.submissionId;
+  const sourceUrl = previewState.sourceUrl;
+  const initialRotation = previewState.rotation;
+  const initialFlipX = previewState.flipX;
+  const initialFlipY = previewState.flipY;
+  const initialZoom = previewState.scale;
+  closeImagePreview();
+  void openAnnotationModal(submissionId, sourceUrl, {
+    initialRotation,
+    initialFlipX,
+    initialFlipY,
+    initialZoom,
+  });
+}
+function describeSubmissionSourceImage(submissionId, sourceImageUrl, fallback = "原图") {
+  const index = getSubmissionImageIndex(submissionId, sourceImageUrl);
+  if (index >= 0) {
+    return `第 ${index + 1} 张`;
+  }
+  return fallback;
+}
+
+function buildSourcePreviewTitle(submissionId, sourceImageUrl) {
+  const row = findSubmissionRecord(submissionId);
+  const sourceLabel = describeSubmissionSourceImage(submissionId, sourceImageUrl, "原图");
+  if (!row) {
+    return `原图预览 · ${sourceLabel}`;
+  }
+  return `原图预览 · ${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module} · ${sourceLabel}`;
+}
+
+function buildAnnotationContextText(submissionId, sourceImageUrl) {
+  const row = findSubmissionRecord(submissionId);
+  const sourceLabel = describeSubmissionSourceImage(submissionId, sourceImageUrl, "原图");
+  if (!row) {
+    return sourceLabel;
+  }
+  return `${displayName(row.student_id)} · ${row.study_date} · ${MODULE_LABELS[row.module] ?? row.module} · ${sourceLabel}`;
+}
+
+function renderTodayBadge(value, label = "今天") {
+  if (!isTodayDate(value)) {
+    return "";
+  }
+  return `<span class="today-badge">${escapeHtml(label)}</span>`;
+}
+
+function buildReviewSelectionStatsMarkup(item) {
+  if (!item) {
+    return '<span class="teacher-review-empty-pill">先在左侧选择一条作业</span>';
+  }
+
+  const review = teacherReviewMap.get(item.id);
+  const status = review?.status ?? item.review_status ?? "pending";
+  const coverage = getAnnotationCoverage(item.id, item.image_urls ?? []);
+  const pills = [
+    `<span class="teacher-review-pill teacher-review-pill-strong">${escapeHtml(displayName(item.student_id))}</span>`,
+    `<span class="teacher-review-pill">${escapeHtml(MODULE_LABELS[item.module] ?? item.module)}</span>`,
+    `<span class="teacher-review-pill">原图 ${escapeHtml(String(coverage.totalImages))} 张</span>`,
+    `<span class="teacher-review-pill ${coverage.state === "full" ? "is-good" : coverage.state === "none" ? "is-warn" : "is-mid"}">已批注 ${escapeHtml(String(coverage.annotatedSources))}/${escapeHtml(String(coverage.totalImages))}</span>`,
+    `<span class="teacher-review-pill">批注图 ${escapeHtml(String(coverage.totalAnnotations))} 张</span>`,
+    `<span class="status-chip ${statusClass(status)}">${escapeHtml(STATUS_LABELS[status] ?? status)}</span>`,
+  ];
+
+  return pills.join("");
+}
+function renderTeacherSubmissionList() {
+  const list = ui["teacher-review-list"];
+  list.innerHTML = "";
+
+  if (!submissionCache.length) {
+    list.innerHTML = `<p class="muted">当前筛选条件下还没有待批改作业。</p>`;
+    return;
+  }
+
+  const byDay = new Map();
+  for (const row of submissionCache) {
+    if (!byDay.has(row.study_date)) {
+      byDay.set(row.study_date, []);
+    }
+    byDay.get(row.study_date).push(row);
+  }
+
+  const today = toIsoDate(new Date());
+  const dayEntries = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  for (const [day, rows] of dayEntries) {
+    const isToday = day === today;
+    const dayWrap = document.createElement("details");
+    dayWrap.className = `submission-day${isToday ? " is-today" : ""}`;
+    if (isToday || rows.some((x) => x.id === selectedSubmissionId)) {
+      dayWrap.open = true;
+    }
+
+    const passed = rows.filter((x) => x.review_status === "passed").length;
+    const returned = rows.filter((x) => x.review_status === "returned").length;
+    const pending = rows.length - passed - returned;
+
+    const daySummary = document.createElement("summary");
+    daySummary.className = "submission-day-summary";
+    daySummary.innerHTML = `
+      <span class="submission-day-title"><strong>${day}</strong>${renderTodayBadge(day)}</span>
+      <span class="submission-day-metrics">通过 ${passed} / 退回 ${returned} / 待处理 ${pending}</span>
+    `;
+    dayWrap.appendChild(daySummary);
+
+    const dayItems = document.createElement("div");
+    dayItems.className = "submission-day-items";
+
+    for (const row of rows) {
+      const fold = document.createElement("details");
+      fold.className = "submission-fold";
+      if (row.id === selectedSubmissionId) {
+        fold.open = true;
+      }
+
+      const coverage = getAnnotationCoverage(row.id, row.image_urls ?? []);
+      const imgCount = coverage.totalImages;
+      const snippet = row.content.length > 200 ? `${row.content.slice(0, 200)}...` : row.content;
+      const coverageText = imgCount === 0
+        ? "无图片"
+        : coverage.annotatedSources === 0
+        ? "未批注"
+        : coverage.annotatedSources === imgCount
+        ? `已批注 ${coverage.annotatedSources}/${imgCount}`
+        : `部分批注 ${coverage.annotatedSources}/${imgCount}`;
+      const coverageTone = coverage.state === "full" ? "is-full" : coverage.state === "none" ? "is-none" : "is-partial";
+      const deleteBtn = isAdminUser()
+        ? `<button class="btn btn-danger btn-small" type="button" data-delete-submission-id="${row.id}" title="删除这条作业">删除</button>`
+        : "";
+
+      fold.innerHTML = `
+        <summary class="submission-fold-summary">
+          <div class="submission-fold-main">
+            <span><strong>${escapeHtml(displayName(row.student_id))}</strong> · ${MODULE_LABELS[row.module] ?? row.module}</span>
+            <div class="submission-fold-pills">
+              <span class="submission-mini-pill">原图 ${imgCount} 张</span>
+              <span class="submission-mini-pill ${coverageTone}">${escapeHtml(coverageText)}</span>
+              ${renderTodayBadge(row.study_date)}
+            </div>
+          </div>
+          <span class="status-chip ${statusClass(row.review_status)}">${STATUS_LABELS[row.review_status] ?? row.review_status}</span>
+        </summary>
+        <div class="submission-fold-body">
+          <p class="submission-meta">${imgCount > 0 ? `已批注原图 ${coverage.annotatedSources}/${imgCount}` : "无图片可批注"} · 批注图 ${coverage.totalAnnotations} 张</p>
+          <p class="submission-content">${escapeHtml(snippet)}</p>
+          ${renderImageThumbs(row.image_urls ?? [], true)}
+          <div class="inline-actions">
+            <button class="btn btn-ghost" type="button" data-review-id="${row.id}" title="在右侧打开这条作业">进入工作台</button>
+            ${deleteBtn}
+          </div>
+        </div>
+      `;
+
+      dayItems.appendChild(fold);
+    }
+
+    dayWrap.appendChild(dayItems);
+    list.appendChild(dayWrap);
+  }
+}
+function renderTeacherSavedReviewList() {
+  const holder = ui["saved-review-list"];
+  if (!holder) {
+    return;
+  }
+  holder.innerHTML = "";
+
+  if (!submissionCache.length || teacherReviewMap.size === 0) {
+    holder.innerHTML = `<p class="muted">还没有已保存的批改记录。</p>`;
+    return;
+  }
+
+  const rows = submissionCache
+    .map((submission) => {
+      const review = teacherReviewMap.get(submission.id);
+      if (!review) {
+        return null;
+      }
+      if (review.teacher_id && review.teacher_id !== currentSession.user.id) {
+        return null;
+      }
+      return { submission, review };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const at = String(a.review.updated_at || a.review.created_at || "");
+      const bt = String(b.review.updated_at || b.review.created_at || "");
+      return bt.localeCompare(at);
+    });
+
+  if (!rows.length) {
+    holder.innerHTML = `<p class="muted">当前筛选条件下没有已保存记录。</p>`;
+    return;
+  }
+
+  for (const row of rows.slice(0, 80)) {
+    const review = row.review;
+    const submission = row.submission;
+    const savedTime = formatDateTime(review.updated_at || review.created_at);
+    const status = review.status || submission.review_status || "pending";
+    const score = Number.isFinite(Number(review.score)) ? Number(review.score) : "-";
+    const snippet = String(review.comment || "").trim().slice(0, 120);
+    const isToday = isTodayDate(submission.study_date);
+
+    const item = document.createElement("article");
+    item.className = "translation-attempt-card";
+    if (submission.id === selectedSubmissionId) {
+      item.classList.add("active");
+    }
+    if (isToday) {
+      item.classList.add("is-today");
+    }
+    item.innerHTML = `
+      <div class="translation-attempt-head">
+        <div>
+          <strong>${escapeHtml(displayName(submission.student_id))}</strong>
+          <p class="translation-attempt-meta">${escapeHtml(submission.study_date)} · ${escapeHtml(MODULE_LABELS[submission.module] ?? submission.module)} · 得分 ${escapeHtml(String(score))}</p>
+        </div>
+        <div class="inline-actions">
+          ${renderTodayBadge(submission.study_date)}
+          <span class="status-chip ${statusClass(status)}">${STATUS_LABELS[status] ?? status}</span>
+        </div>
+      </div>
+      <p class="translation-attempt-snippet">${escapeHtml(snippet || "（暂无评语）")}</p>
+      <div class="inline-actions">
+        <span class="muted">保存于：${escapeHtml(savedTime)}</span>
+        <button class="btn btn-ghost btn-small" type="button" data-saved-review-id="${submission.id}" title="回到这条已保存批改">打开</button>
+      </div>
+    `;
+    holder.appendChild(item);
+  }
+}
+
+async function selectSubmissionForReview(submissionId, keepStatus = false) {
+  selectedSubmissionId = submissionId;
+  renderTeacherSubmissionList();
+  renderTeacherSavedReviewList();
+
+  const item = submissionCache.find((x) => x.id === submissionId);
+  if (!item) {
+    clearReviewEditor();
+    return;
+  }
+
+  ui["review-target"].textContent = `当前作业：${displayName(item.student_id)} · ${item.study_date} · ${MODULE_LABELS[item.module] ?? item.module}`;
+  ui["review-selection-stats"].innerHTML = buildReviewSelectionStatsMarkup(item);
+  ui["review-images"].innerHTML = renderReviewImageActions(item.image_urls ?? [], submissionId);
+  renderReviewAnnotations(submissionId);
+
+  if (!keepStatus) {
+    ui["review-status"].value = item.review_status ?? "pending";
+    ui["review-score"].value = 80;
+    ui["review-comment"].value = "";
+  }
+
+  const cachedReview = teacherReviewMap.get(submissionId);
+  if (cachedReview) {
+    if (!keepStatus) {
+      ui["review-status"].value = cachedReview.status ?? item.review_status ?? "pending";
+      ui["review-score"].value = cachedReview.score ?? 80;
+      ui["review-comment"].value = cachedReview.comment ?? "";
+    }
+    ui["review-last-saved"].textContent = `最近保存：${formatDateTime(cachedReview.updated_at || cachedReview.created_at)}`;
+  } else {
+    ui["review-last-saved"].textContent = "最近保存：-";
+  }
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+
+  if (error) {
+    showAlert(`加载批改记录失败：${error.message}`, "error");
+    restoreReviewDraftForSelection();
+    return;
+  }
+
+  if (data) {
+    teacherReviewMap.set(submissionId, data);
+    if (!keepStatus) {
+      ui["review-status"].value = data.status ?? "pending";
+      ui["review-score"].value = data.score ?? 80;
+      ui["review-comment"].value = data.comment ?? "";
+    }
+    ui["review-last-saved"].textContent = `最近保存：${formatDateTime(data.updated_at || data.created_at)}`;
+    renderTeacherSavedReviewList();
+  }
+
+  ui["review-selection-stats"].innerHTML = buildReviewSelectionStatsMarkup(item);
+  restoreReviewDraftForSelection();
+}
+function renderReviewImageActions(urls, submissionId) {
+  if (!urls.length) {
+    return renderReviewPlaceholder("这条作业没有上传图片。");
+  }
+
+  const sourceMap = getAnnotationSourceMap(submissionId);
+  return `<div class="review-source-grid">${urls
+    .map((url, index) => {
+      const safe = escapeAttr(url);
+      const encoded = encodeURIComponent(url);
+      const related = sourceMap.get(url) ?? [];
+      const label = `第 ${index + 1} 张`;
+      const statusLabel = related.length ? `已批注 ${related.length}` : "待批注";
+      const noteText = related.length
+        ? summarizeText(related.map((item) => item.note).filter(Boolean).join("；"), 48) || "这张图已有批注，可继续补充或修改。"
+        : "这张图还没有批注，可以直接进入批注工作台。";
+      return `<article class="review-source-card ${related.length ? "is-annotated" : "is-pending"}">
+        <div class="review-source-media">
+          <img class="review-source-img" src="${safe}" alt="${escapeAttr(label)}" />
+          <span class="review-source-index">${label}</span>
+          <span class="review-source-state ${related.length ? "done" : "pending"}">${statusLabel}</span>
+        </div>
+        <div class="review-source-body">
+          <div class="review-source-meta">
+            <strong>${label}</strong>
+            <span>${related.length ? "继续批注" : "待开始"}</span>
+          </div>
+          <p class="review-source-note">${escapeHtml(noteText)}</p>
+          <div class="thumb-tool-row review-source-actions">
+            <button
+              type="button"
+              class="btn btn-ghost btn-small annot-btn"
+              data-open-preview="1"
+              data-submission-id="${submissionId}"
+              data-source-url="${encoded}"
+              title="仅查看原图大图"
+            >仅看原图</button>
+            <button
+              type="button"
+              class="btn btn-primary btn-small annot-btn"
+              data-open-annot="1"
+              data-submission-id="${submissionId}"
+              data-source-url="${encoded}"
+              title="进入图片批注工作台"
+            >${related.length ? "继续批注" : "批注工作台"}</button>
+          </div>
+        </div>
+      </article>`;
+    })
+    .join("")}</div>`;
+}
+
+function renderReviewAnnotations(submissionId) {
+  const holder = ui["review-annotations"];
+  const list = annotationMapBySubmission.get(submissionId) ?? [];
+
+  if (!list.length) {
+    holder.innerHTML = renderReviewPlaceholder("已保存的批注图会显示在这里。");
+    return;
+  }
+
+  holder.innerHTML = renderAnnotationThumbs(list, false, {
+    editable: currentProfile?.role === "teacher" || currentProfile?.role === "teammate",
+    submissionId,
+  });
+}
+
+function clearReviewEditor() {
+  selectedSubmissionId = null;
+  ui["review-target"].textContent = "当前还没有选中作业";
+  ui["review-selection-stats"].innerHTML = `<span class="teacher-review-empty-pill">先在左侧选择一条作业</span>`;
+  ui["review-images"].innerHTML = renderReviewPlaceholder("选中作业后，这里会显示原图状态。");
+  ui["review-annotations"].innerHTML = renderReviewPlaceholder("已保存的批注图会显示在这里。");
+  ui["review-status"].value = "pending";
+  ui["review-score"].value = 80;
+  ui["review-comment"].value = "";
+  ui["review-last-saved"].textContent = "最近保存：-";
+  updateReviewDraftState(null);
+}
+async function openAnnotationModal(submissionId, sourceImageUrl, editOptions = null) {
+  if (currentProfile?.role !== "teacher" && currentProfile?.role !== "teammate") {
+    showAlert("只有老师或互改同学可以批注图片。", "error");
+    return;
+  }
+
+  const canvas = ui["annot-canvas"];
+  const ctx = canvas.getContext("2d");
+
+  try {
+    const isEdit = Boolean(editOptions?.annotationId);
+    const baseImageUrl = isEdit ? String(editOptions.baseImageUrl || sourceImageUrl) : sourceImageUrl;
+    const image = await loadImageFromUrl(baseImageUrl, true);
+    const sourceLabel = describeSubmissionSourceImage(submissionId, sourceImageUrl, "原图");
+
+    canvas.width = Math.max(1, image.width);
+    canvas.height = Math.max(1, image.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    annotState.open = true;
+    annotState.submissionId = submissionId;
+    annotState.sourceImageUrl = sourceImageUrl;
+    annotState.annotationId = isEdit ? String(editOptions.annotationId) : null;
+    annotState.originalAnnotatedPath = isEdit ? editOptions.originalAnnotatedPath || null : null;
+    annotState.drawing = false;
+    annotState.moved = false;
+    annotState.history = [];
+    annotState.zoom = 1;
+    annotState.fitZoom = 1;
+
+    ui["annot-note"].value = isEdit ? String(editOptions.note || "") : "";
+    ui["annot-context"].textContent = buildAnnotationContextText(submissionId, sourceImageUrl);
+    ui["annot-modal-title"].textContent = isEdit ? `批注工作台 · ${sourceLabel} · 编辑中` : `批注工作台 · ${sourceLabel}`;
+    ui["annot-modal-tip"].textContent = isEdit
+      ? "当前为编辑模式，保存后会覆盖这张已保存批注。"
+      : "可先调整图片方向和缩放，再直接圈画批注；保存后仍停留在当前作业。";
+    ui["annot-save-btn"].textContent = isEdit ? "更新批注" : "保存批注";
+    ui["annot-save-btn"].title = isEdit ? "覆盖当前这张批注图" : "保存当前批注图";
+    ui["annot-modal"].classList.remove("hidden");
+
+    if (!isEdit) {
+      const initialRotation = Number(editOptions?.initialRotation || 0);
+      if (initialRotation) {
+        await rotateAnnotation(initialRotation, { pushHistory: false });
+      }
+      if (Number(editOptions?.initialFlipX) < 0) {
+        await flipAnnotation("x", { pushHistory: false });
+      }
+      if (Number(editOptions?.initialFlipY) < 0) {
+        await flipAnnotation("y", { pushHistory: false });
+      }
+    }
+
+    annotState.history = [canvas.toDataURL("image/png")];
+    fitAnnotCanvas();
+    const incomingZoom = Number(editOptions?.initialZoom);
+    const zoomFactor = Number.isFinite(incomingZoom) && incomingZoom > 0 ? incomingZoom : 1;
+    annotState.zoom = Math.min(4, Math.max(0.35, annotState.fitZoom * zoomFactor));
+    applyAnnotView();
+  } catch (error) {
+    showAlert(`打开批注工作台失败：${error.message}`, "error");
+  }
+}
+
+function closeAnnotationModal() {
+  annotState.open = false;
+  annotState.submissionId = null;
+  annotState.sourceImageUrl = "";
+  annotState.annotationId = null;
+  annotState.originalAnnotatedPath = null;
+  annotState.drawing = false;
+  annotState.moved = false;
+  annotState.history = [];
+  annotState.zoom = 1;
+  annotState.fitZoom = 1;
+  ui["annot-canvas"].width = 0;
+  ui["annot-canvas"].height = 0;
+  ui["annot-canvas"].style.width = "";
+  ui["annot-canvas"].style.height = "";
+  ui["annot-context"].textContent = "尚未锁定图片";
+  ui["annot-modal-title"].textContent = "图片批注工作台";
+  ui["annot-modal-tip"].textContent = "可先调整图片方向和缩放，再直接圈画批注；保存后仍停留在当前作业。";
+  ui["annot-save-btn"].textContent = "保存批注";
+  ui["annot-save-btn"].title = "保存当前批注图";
+  ui["annot-zoom-label"].textContent = "100%";
+  ui["annot-modal"].classList.add("hidden");
+}
+
+function applyAnnotView() {
+  const canvas = ui["annot-canvas"];
+  if (!canvas || !canvas.width || !canvas.height) {
+    ui["annot-zoom-label"].textContent = "100%";
+    return;
+  }
+  annotState.zoom = Math.min(4, Math.max(0.35, Number(annotState.zoom) || 1));
+  canvas.style.width = `${Math.max(1, Math.round(canvas.width * annotState.zoom))}px`;
+  canvas.style.height = `${Math.max(1, Math.round(canvas.height * annotState.zoom))}px`;
+  ui["annot-zoom-label"].textContent = `${Math.round(annotState.zoom * 100)}%`;
+}
+
+function adjustAnnotZoom(delta) {
+  if (!annotState.open) {
+    return;
+  }
+  annotState.zoom = Math.min(4, Math.max(0.35, annotState.zoom + delta));
+  applyAnnotView();
+}
+
+function fitAnnotCanvas() {
+  if (!annotState.open) {
+    return;
+  }
+  const canvas = ui["annot-canvas"];
+  const wrap = canvas.closest(".annot-canvas-wrap");
+  if (!wrap || !canvas.width || !canvas.height) {
+    return;
+  }
+  const styles = window.getComputedStyle(wrap);
+  const padX = Number.parseFloat(styles.paddingLeft || "0") + Number.parseFloat(styles.paddingRight || "0");
+  const padY = Number.parseFloat(styles.paddingTop || "0") + Number.parseFloat(styles.paddingBottom || "0");
+  const availableWidth = Math.max(240, (wrap.clientWidth || Math.floor(window.innerWidth * 0.84)) - padX - 12);
+  const availableHeight = Math.max(240, (wrap.clientHeight || Math.floor(window.innerHeight * 0.58)) - padY - 12);
+  const fitZoom = Math.min(2, availableWidth / canvas.width, availableHeight / canvas.height);
+  annotState.fitZoom = Math.min(2, Math.max(0.35, fitZoom || 1));
+  annotState.zoom = annotState.fitZoom;
+  applyAnnotView();
+}
+
+function pushAnnotHistorySnapshot() {
+  const canvas = ui["annot-canvas"];
+  if (!canvas || !canvas.width || !canvas.height) {
+    return;
+  }
+  annotState.history.push(canvas.toDataURL("image/png"));
+  if (annotState.history.length > 25) {
+    annotState.history.splice(1, annotState.history.length - 25);
+  }
+}
+async function transformAnnotationCanvas(transformer, options = {}) {
+  if (!annotState.open) {
+    return;
+  }
+  const canvas = ui["annot-canvas"];
+  if (!canvas.width || !canvas.height) {
+    return;
+  }
+  const snapshot = canvas.toDataURL("image/png");
+  const image = await loadImageFromUrl(snapshot, false);
+  const nextCanvas = document.createElement("canvas");
+  await transformer(image, nextCanvas);
+  const width = Math.max(1, nextCanvas.width || image.width);
+  const height = Math.max(1, nextCanvas.height || image.height);
+  const ctx = canvas.getContext("2d");
+  canvas.width = width;
+  canvas.height = height;
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(nextCanvas, 0, 0, width, height);
+  if (options.pushHistory !== false) {
+    pushAnnotHistorySnapshot();
+  }
+  applyAnnotView();
+}
+
+async function rotateAnnotation(degrees, options = {}) {
+  const normalized = ((degrees % 360) + 360) % 360;
+  if (!normalized) {
+    return;
+  }
+  await transformAnnotationCanvas((image, nextCanvas) => {
+    const quarterTurn = normalized === 90 || normalized === 270;
+    nextCanvas.width = quarterTurn ? image.height : image.width;
+    nextCanvas.height = quarterTurn ? image.width : image.height;
+    const ctx = nextCanvas.getContext("2d");
+    ctx.translate(nextCanvas.width / 2, nextCanvas.height / 2);
+    ctx.rotate((normalized * Math.PI) / 180);
+    ctx.drawImage(image, -image.width / 2, -image.height / 2);
+  }, options);
+}
+
+async function flipAnnotation(axis, options = {}) {
+  if (axis !== "x" && axis !== "y") {
+    return;
+  }
+  await transformAnnotationCanvas((image, nextCanvas) => {
+    nextCanvas.width = image.width;
+    nextCanvas.height = image.height;
+    const ctx = nextCanvas.getContext("2d");
+    if (axis === "x") {
+      ctx.translate(image.width, 0);
+      ctx.scale(-1, 1);
+    } else {
+      ctx.translate(0, image.height);
+      ctx.scale(1, -1);
+    }
+    ctx.drawImage(image, 0, 0, image.width, image.height);
+  }, options);
+}
+
+function getAnnotPos(event) {
+  const canvas = ui["annot-canvas"];
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+  const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
+  return {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY,
+  };
+}
+
+function onAnnotPointerUp(event) {
+  if (!annotState.open || !annotState.drawing) {
+    return;
+  }
+
+  event.preventDefault();
+  annotState.drawing = false;
+
+  if (annotState.moved) {
+    pushAnnotHistorySnapshot();
+  }
+}
+
+async function restoreCanvasSnapshot(dataUrl) {
+  const canvas = ui["annot-canvas"];
+  const ctx = canvas.getContext("2d");
+  const image = await loadImageFromUrl(dataUrl, false);
+  canvas.width = Math.max(1, image.width);
+  canvas.height = Math.max(1, image.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  applyAnnotView();
+}
+
+async function saveAnnotationImage() {
+  if (!annotState.open || !annotState.submissionId || !annotState.sourceImageUrl) {
+    showAlert("当前没有可保存的批注图片。", "error", 4600, true);
+    return;
+  }
+
+  await withButtonBusy(ui["annot-save-btn"], "保存中...", async () => {
+    const canvas = ui["annot-canvas"];
+    const submissionId = annotState.submissionId;
+    const sourceImageUrl = annotState.sourceImageUrl;
+    const editingAnnotationId = annotState.annotationId;
+    const previousAnnotatedPath = annotState.originalAnnotatedPath;
+    const isEdit = Boolean(editingAnnotationId);
+    showAlert("正在保存批注（1/3 生成图片）...", "info", 1800, true);
+    let contentType = "image/jpeg";
+    let ext = "jpg";
+    let blob = await canvasToBlob(canvas, contentType, ANNOT_JPEG_QUALITY);
+    if (!blob) {
+      contentType = "image/png";
+      ext = "png";
+      blob = await canvasToBlob(canvas, contentType, 0.92);
+    }
+
+    if (!blob || blob.size <= 0) {
+      throw new Error("生成批注图片失败。");
+    }
+
+    const stamp = Date.now();
+    const path = `${currentSession.user.id}/${submissionId}/${stamp}_annot.${ext}`;
+    showAlert("正在保存批注（2/3 上传文件）...", "info", 1800, true);
+    await uploadAnnotationBlobWithRetry(path, blob, contentType);
+
+    const { data } = supabase.storage.from(ANNOT_BUCKET).getPublicUrl(path);
+    const note = ui["annot-note"].value.trim();
+    const payload = {
+      submission_id: submissionId,
+      teacher_id: currentSession.user.id,
+      source_image_url: sourceImageUrl,
+      annotated_image_url: data.publicUrl,
+      note,
+    };
+
+    showAlert("正在保存批注（3/3 写入记录）...", "info", 1800, true);
+    const writeResult = await saveAnnotationRecordWithVerification(payload, {
+      annotationId: editingAnnotationId,
+    });
+    if (writeResult.error) {
+      throw writeResult.error;
+    }
+
+    const savedRow = writeResult.data || {
+      ...payload,
+      id: editingAnnotationId || `local_${stamp}`,
+      created_at: new Date().toISOString(),
+    };
+    const prev = annotationMapBySubmission.get(submissionId) ?? [];
+    if (isEdit) {
+      const next = prev.map((item) => (item.id === editingAnnotationId ? { ...item, ...savedRow } : item));
+      const found = next.some((item) => item.id === editingAnnotationId);
+      annotationMapBySubmission.set(submissionId, found ? next : [savedRow, ...next]);
+      if (previousAnnotatedPath && previousAnnotatedPath !== path) {
+        void supabase.storage.from(ANNOT_BUCKET).remove([previousAnnotatedPath]);
+      }
+    } else {
+      annotationMapBySubmission.set(submissionId, [savedRow, ...prev]);
+    }
+
+    renderTeacherSubmissionList();
+    renderTeacherSavedReviewList();
+    const selectedRow = findSubmissionRecord(submissionId);
+    if (selectedSubmissionId === submissionId && selectedRow) {
+      ui["review-images"].innerHTML = renderReviewImageActions(selectedRow.image_urls ?? [], submissionId);
+      renderReviewAnnotations(submissionId);
+      ui["review-selection-stats"].innerHTML = buildReviewSelectionStatsMarkup(selectedRow);
+    }
+
+    closeAnnotationModal();
+    showAlert(
+      writeResult.recovered
+        ? (isEdit ? "批注已更新，虽然网络较慢，但系统已经校验保存成功。" : "批注已保存，虽然网络较慢，但系统已经校验保存成功。")
+        : (isEdit ? "批注已更新。" : "批注已保存。"),
+      "info",
+      3200,
+      true
+    );
+
+    void loadTeacherData(true);
+  }).catch((error) => {
+    showAlert(`保存批注失败：${error.message}`, "error", 6500, true);
+  });
+}
+function renderAnnotationThumbs(rows, compact = false, options = {}) {
+  if (!rows.length) {
+    return renderReviewPlaceholder("还没有已保存的批注文件。");
+  }
+
+  const editable = Boolean(options.editable) && !compact;
+  const submissionId = String(options.submissionId || "");
+  const limit = compact ? 3 : rows.length;
+  const picked = rows.slice(0, limit);
+  const more = rows.length > limit ? `<span class="more-badge">+${rows.length - limit}</span>` : "";
+
+  const html = picked
+    .map((row, idx) => {
+      const safe = escapeAttr(row.annotated_image_url);
+      const sourceLabel = describeSubmissionSourceImage(submissionId, row.source_image_url, `第 ${idx + 1} 张`);
+      const title = escapeAttr(row.note || sourceLabel);
+      const note = row.note
+        ? `<span class="annot-note">${escapeHtml(row.note)}</span>`
+        : `<span class="annot-note muted">暂无说明</span>`;
+      const canEdit = editable && row.id && !String(row.id).startsWith("local_");
+      const editBtn = canEdit
+        ? `<button class="btn btn-ghost btn-small annot-edit-btn" type="button" data-edit-annot-id="${row.id}" data-submission-id="${submissionId}" title="继续编辑这条批注">继续编辑</button>`
+        : "";
+      return `<article class="annot-item">
+        <a href="${safe}" target="_blank" rel="noreferrer" title="${title}">
+          <img class="thumb-img" src="${safe}" alt="批注图-${idx + 1}" />
+        </a>
+        <div class="annot-note-stack">
+          <span class="annot-source-tag">${escapeHtml(sourceLabel)}</span>
+          ${compact ? "" : note}
+        </div>
+        ${editBtn}
+      </article>`;
+    })
+    .join("");
+
+  return `<div class="review-annotation-grid">${html}${more}</div>`;
+}
 function renderImageThumbs(urls, compact = false) {
   if (!urls || urls.length === 0) {
     return "<span class=\"muted\">无</span>";

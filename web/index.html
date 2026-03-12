@@ -361,17 +361,17 @@
             </select>
           </div>
         </div>
-        <button id="teacher-load-btn" class="btn btn-ghost" type="button" title="Reload the current teacher queue">Refresh Queue</button>
+        <button id="teacher-load-btn" class="btn btn-ghost" type="button" title="刷新当前批改队列">刷新队列</button>
 
         <div class="teacher-review-workbench">
           <aside class="teacher-review-sidebar">
             <section class="teacher-review-sidebar-card">
               <div class="teacher-review-section-title">
                 <div>
-                  <p class="teacher-review-kicker">QUEUE</p>
-                  <h3>Submissions</h3>
+                  <p class="teacher-review-kicker">待批改</p>
+                  <h3>提交队列</h3>
                 </div>
-                <span class="muted">Pick on the left, review on the right.</span>
+                <span class="muted">左侧选作业，右侧直接进入批改工作台。</span>
               </div>
               <div id="teacher-review-list" class="review-list teacher-review-list"></div>
             </section>
@@ -379,48 +379,48 @@
             <section class="teacher-review-sidebar-card">
               <div class="translation-head-actions inline-actions">
                 <div>
-                  <p class="teacher-review-kicker">SAVED</p>
-                  <h3>Saved Reviews</h3>
+                  <p class="teacher-review-kicker">已保存</p>
+                  <h3>已保存批改</h3>
                 </div>
-                <button id="saved-review-refresh-btn" class="btn btn-ghost btn-small" type="button" title="Refresh the saved review list">Refresh</button>
+                <button id="saved-review-refresh-btn" class="btn btn-ghost btn-small" type="button" title="刷新已保存批改列表">刷新</button>
               </div>
-              <p class="muted">Every saved review appears here immediately for confirmation.</p>
+              <p class="muted">每次保存后会立即出现在这里，方便快速确认和回看。</p>
               <div id="saved-review-list" class="review-list teacher-saved-review-list"></div>
             </section>
 
             <section class="teacher-review-sidebar-card teacher-only teacher-calendar-card">
               <div class="teacher-review-section-title">
                 <div>
-                  <p class="teacher-review-kicker">TRACKER</p>
-                  <h3>Calendar</h3>
+                  <p class="teacher-review-kicker">打卡追踪</p>
+                  <h3>学生日历</h3>
                 </div>
-                <span class="muted">A red frame marks today for quick focus.</span>
+                <span class="muted">红框表示今天，角标数字表示当天提交模块数。</span>
               </div>
               <div class="grid-2">
                 <div class="field-row">
-                  <label for="calendar-student">Student</label>
+                  <label for="calendar-student">学生</label>
                   <select id="calendar-student"></select>
                 </div>
                 <div class="field-row">
-                  <label for="teacher-calendar-label">Month</label>
+                  <label for="teacher-calendar-label">月份</label>
                   <div class="calendar-toolbar compact">
                     <div class="inline-actions">
-                      <button id="teacher-calendar-prev-btn" class="btn btn-ghost btn-small" type="button" title="View previous month">Prev</button>
-                      <button id="teacher-calendar-today-btn" class="btn btn-ghost btn-small" type="button" title="Return to current month">Today</button>
-                      <button id="teacher-calendar-next-btn" class="btn btn-ghost btn-small" type="button" title="View next month">Next</button>
+                      <button id="teacher-calendar-prev-btn" class="btn btn-ghost btn-small" type="button" title="查看上个月">上月</button>
+                      <button id="teacher-calendar-today-btn" class="btn btn-ghost btn-small" type="button" title="回到本月">本月</button>
+                      <button id="teacher-calendar-next-btn" class="btn btn-ghost btn-small" type="button" title="查看下个月">下月</button>
                     </div>
                     <strong id="teacher-calendar-label">-</strong>
                   </div>
                 </div>
               </div>
               <div class="calendar-legend">
-                <span class="calendar-legend-item"><i class="calendar-dot ring"></i>Ring</span>
-                <span class="calendar-legend-item"><i class="calendar-dot done"></i>Done</span>
-                <span class="calendar-legend-item"><i class="calendar-dot missed"></i>Missed</span>
-                <span class="calendar-legend-item"><i class="calendar-dot count"></i>Corner number = modules submitted</span>
+                <span class="calendar-legend-item"><i class="calendar-dot ring"></i>老师圈一下</span>
+                <span class="calendar-legend-item"><i class="calendar-dot done"></i>已完成</span>
+                <span class="calendar-legend-item"><i class="calendar-dot missed"></i>待补交</span>
+                <span class="calendar-legend-item"><i class="calendar-dot count"></i>角标数字 = 当天提交数</span>
               </div>
               <div id="teacher-calendar-grid" class="calendar-grid calendar-grid-editable"></div>
-              <p class="muted">Click a date to cycle through ring, done, missed, then back to empty.</p>
+              <p class="muted">点击日期可在“圈一下 / 已完成 / 待补交 / 清空”之间切换。</p>
             </section>
           </aside>
 
@@ -428,12 +428,12 @@
             <section class="teacher-review-focus-card">
               <div class="teacher-review-focus-head">
                 <div>
-                  <p class="teacher-review-kicker">WORKBENCH</p>
-                  <h3>Review Workbench</h3>
-                  <p id="review-target" class="muted">No submission selected yet.</p>
+                  <p class="teacher-review-kicker">批注工作台</p>
+                  <h3>老师批改台</h3>
+                  <p id="review-target" class="muted">还没有选中作业。</p>
                 </div>
                 <div id="review-selection-stats" class="teacher-review-stat-strip">
-                  <span class="teacher-review-empty-pill">Choose one submission from the left</span>
+                  <span class="teacher-review-empty-pill">先从左侧选择一条提交记录</span>
                 </div>
               </div>
 
@@ -441,26 +441,26 @@
                 <section class="teacher-review-stage-panel">
                   <div class="teacher-review-section-title">
                     <div>
-                      <p class="teacher-review-kicker">SOURCE</p>
-                      <h4>Original Images</h4>
+                      <p class="teacher-review-kicker">原图入口</p>
+                      <h4>学生原始图片</h4>
                     </div>
-                    <span class="muted">Each card shows whether that image already has markup.</span>
+                    <span class="muted">每张卡片都会显示是否已批注，可直接进入批注工作台。</span>
                   </div>
                   <div id="review-images" class="review-image-board">
-                    <div class="teacher-review-placeholder">Choose a submission to see image status here.</div>
+                    <div class="teacher-review-placeholder">选中一条提交记录后，这里会显示对应原图和批注入口。</div>
                   </div>
                 </section>
 
                 <section class="teacher-review-stage-panel">
                   <div class="teacher-review-section-title">
                     <div>
-                      <p class="teacher-review-kicker">ANNOTATIONS</p>
-                      <h4>Saved Markups</h4>
+                      <p class="teacher-review-kicker">批注结果</p>
+                      <h4>已保存批注图</h4>
                     </div>
-                    <span class="muted">Saved files stay tied to the current submission.</span>
+                    <span class="muted">保存后的批注图会绑定到当前作业，可继续编辑。</span>
                   </div>
                   <div id="review-annotations" class="review-annotation-board">
-                    <div class="teacher-review-placeholder">Saved annotation files will appear here.</div>
+                    <div class="teacher-review-placeholder">保存后的批注图会出现在这里。</div>
                   </div>
                 </section>
               </div>
@@ -469,36 +469,36 @@
             <section class="review-editor teacher-review-form-card">
               <div class="teacher-review-section-title">
                 <div>
-                  <p class="teacher-review-kicker">FEEDBACK</p>
-                  <h3>Score And Comment</h3>
+                  <p class="teacher-review-kicker">反馈填写</p>
+                  <h3>评分与评语</h3>
                 </div>
-                <span id="review-last-saved" class="muted">Last saved: -</span>
+                <span id="review-last-saved" class="muted">最近保存：-</span>
               </div>
               <div class="grid-2">
                 <div class="field-row">
-                  <label for="review-status">Status</label>
+                  <label for="review-status">批改状态</label>
                   <select id="review-status">
-                    <option value="passed">Passed</option>
-                    <option value="returned">Return</option>
-                    <option value="pending">Pending</option>
+                    <option value="passed">通过</option>
+                    <option value="returned">退回重做</option>
+                    <option value="pending">待处理</option>
                   </select>
                 </div>
                 <div class="field-row">
-                  <label for="review-score">Score (0-100)</label>
+                  <label for="review-score">分数（0-100）</label>
                   <input id="review-score" type="number" min="0" max="100" value="80" />
                 </div>
               </div>
               <div class="field-row">
-                <label for="review-comment">Visible Comment</label>
-                <textarea id="review-comment" rows="5" placeholder="Write the error pattern, fix path, and next-step advice."></textarea>
+                <label for="review-comment">学生可见评语</label>
+                <textarea id="review-comment" rows="5" placeholder="写清错误模式、修改方向、下一步练习建议。"></textarea>
               </div>
               <div class="draft-strip">
-                <p id="review-draft-state" class="muted">Current review content is autosaved locally and can be restored after refresh.</p>
-                <button id="clear-review-draft-btn" class="btn btn-ghost btn-small" type="button" title="Clear the local draft for this review">Clear Local Draft</button>
+                <p id="review-draft-state" class="muted">当前批改内容会自动保存在本地，刷新后也能恢复。</p>
+                <button id="clear-review-draft-btn" class="btn btn-ghost btn-small" type="button" title="清空这条批改的本地草稿">清空本地草稿</button>
               </div>
               <div class="teacher-review-save-row">
-                <button id="save-review-btn" class="btn btn-primary" type="button" title="Save this review">Save Review</button>
-                <span class="muted">Saving keeps the same selected submission in place.</span>
+                <button id="save-review-btn" class="btn btn-primary" type="button" title="保存当前批改">保存批改</button>
+                <span class="muted">保存后会保持当前选中的作业，不会跳走。</span>
               </div>
             </section>
           </div>
@@ -749,13 +749,13 @@
     <div class="modal-card image-preview-card">
       <div class="modal-head">
         <div>
-          <h3 id="image-preview-title">作业图片预览</h3>
-          <p id="image-preview-tip" class="muted">旋转、翻转和缩放只影响当前预览，不会改动原图。</p>
+          <h3 id="image-preview-title">图片预览</h3>
+          <p id="image-preview-tip" class="muted">这里支持放大、旋转和翻转，仅影响当前预览，不会修改原图。</p>
         </div>
         <button id="image-preview-close-btn" type="button" class="btn btn-danger btn-small" title="关闭预览弹窗">关闭</button>
       </div>
       <div class="image-preview-stage">
-        <img id="image-preview-img" class="image-preview-img" alt="作业图片预览" />
+        <img id="image-preview-img" class="image-preview-img" alt="图片预览" />
       </div>
       <div class="image-preview-tools inline-actions">
         <button id="image-preview-zoom-out-btn" class="btn btn-ghost btn-small" type="button" title="缩小图片">缩小</button>
@@ -765,7 +765,7 @@
         <button id="image-preview-flip-x-btn" class="btn btn-ghost btn-small" type="button" title="水平翻转">左右翻</button>
         <button id="image-preview-flip-y-btn" class="btn btn-ghost btn-small" type="button" title="垂直翻转">上下翻</button>
         <button id="image-preview-reset-btn" class="btn btn-ghost btn-small" type="button" title="恢复默认预览角度">复位</button>
-        <button id="image-preview-open-annot-btn" class="btn btn-primary btn-small" type="button" title="带着这张图去圈画批注">去圈画</button>
+        <button id="image-preview-open-annot-btn" class="btn btn-primary btn-small" type="button" title="带着这张图进入批注工作台">去批注</button>
       </div>
     </div>
   </section>
@@ -787,35 +787,45 @@
   <section id="annot-modal" class="modal hidden">
     <div class="modal-card annot-modal-card">
       <div class="modal-head">
-        <h3 id="annot-modal-title">Image Annotation</h3>
-        <button id="annot-close-btn" type="button" class="btn btn-danger btn-small" title="Close the annotation modal">Close</button>
+        <h3 id="annot-modal-title">图片批注工作台</h3>
+        <button id="annot-close-btn" type="button" class="btn btn-danger btn-small" title="关闭批注弹窗">关闭</button>
       </div>
       <div class="annot-modal-layout">
         <div class="annot-stage-panel">
-          <p id="annot-modal-tip" class="muted">Draw with mouse or touch. Saving keeps you on the same selected submission.</p>
+          <p id="annot-modal-tip" class="muted">可先调整图片方向，再直接圈画批注；保存后仍停留在当前作业。</p>
+          <div class="annot-stage-tools inline-actions">
+            <button id="annot-zoom-out-btn" class="btn btn-ghost btn-small" type="button" title="缩小当前画布">缩小</button>
+            <button id="annot-zoom-in-btn" class="btn btn-ghost btn-small" type="button" title="放大当前画布">放大</button>
+            <button id="annot-rotate-left-btn" class="btn btn-ghost btn-small" type="button" title="逆时针旋转 90 度">左转</button>
+            <button id="annot-rotate-right-btn" class="btn btn-ghost btn-small" type="button" title="顺时针旋转 90 度">右转</button>
+            <button id="annot-flip-x-btn" class="btn btn-ghost btn-small" type="button" title="水平翻转当前画布">左右翻</button>
+            <button id="annot-flip-y-btn" class="btn btn-ghost btn-small" type="button" title="垂直翻转当前画布">上下翻</button>
+            <button id="annot-fit-btn" class="btn btn-ghost btn-small" type="button" title="恢复到适合查看的缩放比例">适配</button>
+            <span id="annot-zoom-label" class="annot-zoom-label">100%</span>
+          </div>
           <div class="annot-canvas-wrap">
             <canvas id="annot-canvas"></canvas>
           </div>
         </div>
         <aside class="annot-side-panel">
           <div class="annot-side-block">
-            <p class="teacher-review-kicker">TARGET</p>
-            <h4>Current Image</h4>
-            <p id="annot-context" class="annot-context">No image locked</p>
+            <p class="teacher-review-kicker">当前目标</p>
+            <h4>正在批注的图片</h4>
+            <p id="annot-context" class="annot-context">还没有锁定图片</p>
           </div>
           <div class="annot-side-block">
             <div class="field-row">
-              <label for="annot-note">Short Note</label>
-              <input id="annot-note" type="text" maxlength="200" placeholder="Example: Rewrite this clause with a clearer subject." />
+              <label for="annot-note">批注说明</label>
+              <input id="annot-note" type="text" maxlength="200" placeholder="例如：这个从句主语不清晰，建议重写。" />
             </div>
           </div>
           <div class="annot-side-block">
             <div class="annot-action-stack">
-              <button id="annot-undo-btn" class="btn btn-ghost btn-small" type="button" title="Undo the last drawing step">Undo</button>
-              <button id="annot-clear-btn" class="btn btn-ghost btn-small" type="button" title="Clear the current drawing but keep the source image">Clear</button>
-              <button id="annot-save-btn" class="btn btn-primary btn-small" type="button" title="Save this annotation file">Save</button>
+              <button id="annot-undo-btn" class="btn btn-ghost btn-small" type="button" title="撤销上一步圈画">撤销</button>
+              <button id="annot-clear-btn" class="btn btn-ghost btn-small" type="button" title="清空当前圈画，但保留底图">清空圈画</button>
+              <button id="annot-save-btn" class="btn btn-primary btn-small" type="button" title="保存当前批注图">保存批注</button>
             </div>
-            <p class="muted">The saved result will appear back in the current workbench panel.</p>
+            <p class="muted">保存后会立刻回到当前作业的批注结果区，可继续修改。</p>
           </div>
         </aside>
       </div>
