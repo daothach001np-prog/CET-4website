@@ -1,4 +1,70 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+window.__cet4_module_loaded = true;
+window.__cet4_app_interactive = false;
+
+const SUPABASE_SDK_IMPORTS = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm",
+  "https://esm.sh/@supabase/supabase-js@2",
+  "https://esm.run/@supabase/supabase-js@2",
+  "https://unpkg.com/@supabase/supabase-js@2/dist/module/index.js",
+];
+const SUPABASE_SDK_IMPORT_TIMEOUT_MS = 4500;
+
+let createClientFactory = null;
+
+function importWithTimeout(url, timeoutMs = SUPABASE_SDK_IMPORT_TIMEOUT_MS) {
+  return Promise.race([
+    import(url),
+    new Promise((_, reject) => {
+      window.setTimeout(() => {
+        reject(new Error(`timeout after ${Math.round(timeoutMs / 1000)}s`));
+      }, timeoutMs);
+    }),
+  ]);
+}
+
+function reportBootstrapError(error) {
+  const message = error && error.message ? error.message : String(error || "Unknown bootstrap error");
+  console.error("Bootstrap failed", error);
+  window.__cet4_app_interactive = false;
+
+  try {
+    if (ui["alert"]) {
+      showAlert(`Bootstrap failed: ${message}`, "error", 10000);
+      return;
+    }
+  } catch (_innerError) {
+    // Fallback to a blocking dialog below.
+  }
+
+  try {
+    window.alert(`Bootstrap failed: ${message}`);
+  } catch (_alertError) {
+    // No-op.
+  }
+}
+
+async function ensureCreateClientFactory() {
+  if (typeof createClientFactory === "function") {
+    return createClientFactory;
+  }
+
+  const failures = [];
+  for (const url of SUPABASE_SDK_IMPORTS) {
+    try {
+      const mod = await importWithTimeout(url);
+      if (mod && typeof mod.createClient === "function") {
+        createClientFactory = mod.createClient;
+        return createClientFactory;
+      }
+      failures.push(`${url} (missing createClient)`);
+    } catch (error) {
+      failures.push(`${url} (${error && error.message ? error.message : error})`);
+    }
+  }
+
+  console.error("Failed to load Supabase SDK", failures);
+  throw new Error("Unable to load the login service. Check network/CDN access and refresh.");
+}
 
 const MODULE_LABELS = {
   reading: "阅读",
@@ -142,12 +208,14 @@ const annotState = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-  void init();
+  void init().catch(reportBootstrapError);
 });
 
 async function init() {
   cacheUi();
+  bindGlobalErrorHandlers();
   bindEvents();
+  window.__cet4_app_interactive = true;
   fillDefaultDates();
   renderMotivation();
   initAiConfigUi();
@@ -156,10 +224,17 @@ async function init() {
   renderTranslationPendingImages();
   renderMyTranslationHistory();
   renderTeacherTranslationList();
-  bindGlobalErrorHandlers();
 
   if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
     lockAuth("请先在 web/config.js 填写 Supabase 配置。");
+    return;
+  }
+
+  let createClient = null;
+  try {
+    createClient = await ensureCreateClientFactory();
+  } catch (error) {
+    lockAuth(error.message);
     return;
   }
 
@@ -2015,6 +2090,11 @@ function isReviewerProfile() {
 }
 
 async function signUp() {
+  if (!supabase) {
+    showAlert("Login service is still loading. Refresh the page and try again.", "error");
+    return;
+  }
+
   const email = ui["email"].value.trim();
   const password = ui["password"].value;
   if (!email || password.length < 6) {
@@ -2032,6 +2112,11 @@ async function signUp() {
 }
 
 async function signIn() {
+  if (!supabase) {
+    showAlert("Login service is still loading. Refresh the page and try again.", "error");
+    return;
+  }
+
   const email = ui["email"].value.trim();
   const password = ui["password"].value;
 

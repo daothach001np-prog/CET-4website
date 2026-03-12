@@ -832,6 +832,49 @@
     </div>
   </section>
 
+  <script>
+    window.__cet4_module_loaded = window.__cet4_module_loaded || false;
+    window.__cet4_app_interactive = window.__cet4_app_interactive || false;
+
+    function showBootstrapFallback(message) {
+      var alertEl = document.getElementById("alert");
+      if (alertEl) {
+        alertEl.textContent = message;
+        alertEl.classList.remove("hidden", "info");
+        alertEl.classList.add("error");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.location && window.location.protocol === "file:") {
+        showBootstrapFallback("Open this page via http://127.0.0.1:5173 instead of file:///.");
+      }
+
+      var guard = function (event) {
+        if (window.__cet4_app_interactive) {
+          return;
+        }
+        event.preventDefault();
+        showBootstrapFallback("Main script is not ready. Refresh the page and check network/CDN access.");
+      };
+
+      var signInBtn = document.getElementById("sign-in-btn");
+      if (signInBtn) {
+        signInBtn.addEventListener("click", guard);
+      }
+
+      var signUpBtn = document.getElementById("sign-up-btn");
+      if (signUpBtn) {
+        signUpBtn.addEventListener("click", guard);
+      }
+
+      window.setTimeout(function () {
+        if (!window.__cet4_app_interactive) {
+          showBootstrapFallback("Main script did not finish starting. Refresh the page and check browser console/network.");
+        }
+      }, 4000);
+    });
+  </script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
