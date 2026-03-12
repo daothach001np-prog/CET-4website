@@ -1,10 +1,14 @@
+<<<<<<< HEAD
 window.__cet4_module_loaded = true;
 window.__cet4_app_interactive = false;
 
+=======
+>>>>>>> 4238187a552965c6cd752a9241f0c6889a692325
 const SUPABASE_SDK_IMPORTS = [
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm",
   "https://esm.sh/@supabase/supabase-js@2",
   "https://esm.run/@supabase/supabase-js@2",
+<<<<<<< HEAD
   "https://unpkg.com/@supabase/supabase-js@2/dist/module/index.js",
 ];
 const SUPABASE_SDK_IMPORT_TIMEOUT_MS = 4500;
@@ -42,6 +46,11 @@ function reportBootstrapError(error) {
     // No-op.
   }
 }
+=======
+];
+
+let createClientFactory = window.supabase?.createClient ?? null;
+>>>>>>> 4238187a552965c6cd752a9241f0c6889a692325
 
 async function ensureCreateClientFactory() {
   if (typeof createClientFactory === "function") {
@@ -51,19 +60,32 @@ async function ensureCreateClientFactory() {
   const failures = [];
   for (const url of SUPABASE_SDK_IMPORTS) {
     try {
+<<<<<<< HEAD
       const mod = await importWithTimeout(url);
       if (mod && typeof mod.createClient === "function") {
+=======
+      const mod = await import(url);
+      if (typeof mod?.createClient === "function") {
+>>>>>>> 4238187a552965c6cd752a9241f0c6889a692325
         createClientFactory = mod.createClient;
         return createClientFactory;
       }
       failures.push(`${url} (missing createClient)`);
     } catch (error) {
+<<<<<<< HEAD
       failures.push(`${url} (${error && error.message ? error.message : error})`);
+=======
+      failures.push(`${url} (${error?.message || error})`);
+>>>>>>> 4238187a552965c6cd752a9241f0c6889a692325
     }
   }
 
   console.error("Failed to load Supabase SDK", failures);
+<<<<<<< HEAD
   throw new Error("Unable to load the login service. Check network/CDN access and refresh.");
+=======
+  throw new Error("Unable to load the login service. Refresh the page and try again.");
+>>>>>>> 4238187a552965c6cd752a9241f0c6889a692325
 }
 
 const MODULE_LABELS = {
