@@ -1,4 +1,33 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const SUPABASE_SDK_IMPORTS = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm",
+  "https://esm.sh/@supabase/supabase-js@2",
+  "https://esm.run/@supabase/supabase-js@2",
+];
+
+let createClientFactory = window.supabase?.createClient ?? null;
+
+async function ensureCreateClientFactory() {
+  if (typeof createClientFactory === "function") {
+    return createClientFactory;
+  }
+
+  const failures = [];
+  for (const url of SUPABASE_SDK_IMPORTS) {
+    try {
+      const mod = await import(url);
+      if (typeof mod?.createClient === "function") {
+        createClientFactory = mod.createClient;
+        return createClientFactory;
+      }
+      failures.push(`${url} (missing createClient)`);
+    } catch (error) {
+      failures.push(`${url} (${error?.message || error})`);
+    }
+  }
+
+  console.error("Failed to load Supabase SDK", failures);
+  throw new Error("Unable to load the login service. Refresh the page and try again.");
+}
 
 const MODULE_LABELS = {
   reading: "阅读",
@@ -160,6 +189,14 @@ async function init() {
 
   if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
     lockAuth("请先在 web/config.js 填写 Supabase 配置。");
+    return;
+  }
+
+  let createClient = null;
+  try {
+    createClient = await ensureCreateClientFactory();
+  } catch (error) {
+    lockAuth(error.message);
     return;
   }
 
@@ -2015,6 +2052,11 @@ function isReviewerProfile() {
 }
 
 async function signUp() {
+  if (!supabase) {
+    showAlert("Login service is still loading. Refresh the page and try again.", "error");
+    return;
+  }
+
   const email = ui["email"].value.trim();
   const password = ui["password"].value;
   if (!email || password.length < 6) {
@@ -2032,6 +2074,11 @@ async function signUp() {
 }
 
 async function signIn() {
+  if (!supabase) {
+    showAlert("Login service is still loading. Refresh the page and try again.", "error");
+    return;
+  }
+
   const email = ui["email"].value.trim();
   const password = ui["password"].value;
 
